@@ -1,0 +1,21 @@
+google:
+  credentials_file: "data/service-account.json"
+  # delegated_user: "admin@company.com"
+
+drive:
+  id: "YOUR_DRIVE_ID"
+  root_folder_id: "ROOT_FOLDER_ID"  # Defaults to drive_id if set to "ROOT_FOLDER_ID"
+  root_folder_name: "Clients"
+
+scan:
+  include_trashed: false
+  include_shortcuts: true
+  max_depth: null
+  public_folder_name: "public"
+
+output:
+  dir: "./data"
+  yaml_file: "drive_audit.yml"
+  files_csv: "files.csv"
+  permissions_csv: "permissions.csv"
+

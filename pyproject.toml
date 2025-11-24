@@ -1,0 +1,16 @@
+[project]
+name = "drive_audit"
+version = "0.1.0"
+description = "Google Drive Audit CLI"
+requires-python = ">=3.11"
+dependencies = [
+    "google-auth",
+    "google-auth-httplib2",
+    "google-api-python-client",
+    "PyYAML",
+    "python-dotenv",
+]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
