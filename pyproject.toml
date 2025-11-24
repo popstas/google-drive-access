@@ -9,6 +9,7 @@ dependencies = [
     "google-api-python-client",
     "PyYAML",
     "python-dotenv",
+    "requests",
 ]
 
 [build-system]

@@ -19,4 +19,17 @@ output:
   files_csv: "files.csv"
   permissions_csv: "permissions.csv"
 
+planfix:
+  getChildTasks:
+    url: https://api.example.com/tasks
+    token: skldjfh
+  getManager:
+    url: https://api.example.com/manager
+    token: skldjfh
+  role: "contributor"
+
+http:
+  port: 7587
+  token: skldjfh
+
 
