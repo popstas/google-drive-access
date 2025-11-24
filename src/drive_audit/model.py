@@ -2,6 +2,26 @@ from dataclasses import dataclass, field
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
+
+@dataclass
+class PlanfixEndpointConfig:
+    url: str
+    token: str
+
+
+@dataclass
+class PlanfixConfig:
+    get_child_tasks: PlanfixEndpointConfig
+    get_manager: PlanfixEndpointConfig
+    role: str
+
+
+@dataclass
+class HttpConfig:
+    port: int
+    token: str
+
+
 @dataclass
 class DriveConfig:
     credentials_file: str

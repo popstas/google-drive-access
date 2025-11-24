@@ -8,7 +8,7 @@ from .model import DriveConfig
 
 logger = logging.getLogger(__name__)
 
-SCOPES = ['https://www.googleapis.com/auth/drive.metadata.readonly', 'https://www.googleapis.com/auth/drive.readonly']
+SCOPES = ['https://www.googleapis.com/auth/drive']
 
 def get_service(config: DriveConfig):
     """Authenticates and returns the Google Drive service."""
@@ -96,6 +96,35 @@ def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[in
                 break
         except HttpError as error:
             logger.error(f"An error occurred while listing files: {error}")
-            # Depending on requirements, we might want to retry or stop. 
+            # Depending on requirements, we might want to retry or stop.
             # For now, we raise to stop execution on critical error.
             raise
+
+
+def add_user_permission(service, file_id: str, email: str, role: str) -> Dict[str, Any]:
+    """Adds a permission for a user to a file or folder.
+    
+    Note: The 'organizer' role is only valid at the shared drive level.
+    For files/folders within a shared drive, 'organizer' is automatically
+    converted to 'fileOrganizer'.
+    """
+    # Convert 'organizer' to 'fileOrganizer' for files/folders
+    # The 'organizer' role can only be used at the drive level, not on individual items
+    if role == "organizer":
+        role = "fileOrganizer"
+        logger.debug(f"Converted role 'organizer' to 'fileOrganizer' for file/folder {file_id}")
+    
+    try:
+        return service.permissions().create(
+            fileId=file_id,
+            supportsAllDrives=True,
+            sendNotificationEmail=False,
+            body={
+                "type": "user",
+                "role": role,
+                "emailAddress": email,
+            },
+        ).execute()
+    except HttpError as error:
+        logger.error(f"Failed to add permission for {email} on {file_id}: {error}")
+        raise
