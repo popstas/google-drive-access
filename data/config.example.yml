@@ -26,7 +26,7 @@ planfix:
   getManager:
     url: https://api.example.com/manager
     token: skldjfh
-  role: "contributor"
+  role: "writer"
 
 http:
   port: 7587
