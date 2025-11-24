@@ -4,22 +4,27 @@ import logging
 import os
 import sys
 from .model import DriveConfig
-from .google_client import get_service, list_files
+from .google_client import get_service, list_files, get_file_permissions
 from .scanner import build_file_tree
 from .export_yaml import save_yaml
 from .export_csv import save_files_csv, save_permissions_csv
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[logging.StreamHandler(sys.stdout)]
-)
 logger = logging.getLogger(__name__)
 
 def load_config(config_path: str) -> dict:
     with open(config_path, 'r', encoding='utf-8') as f:
         return yaml.safe_load(f)
+
+def get_log_level(level_name: str) -> int:
+    """Convert string log level name to logging constant."""
+    level_map = {
+        'DEBUG': logging.DEBUG,
+        'INFO': logging.INFO,
+        'WARNING': logging.WARNING,
+        'ERROR': logging.ERROR,
+        'CRITICAL': logging.CRITICAL
+    }
+    return level_map.get(level_name.upper(), logging.INFO)
 
 def main():
     parser = argparse.ArgumentParser(description="Google Drive Audit CLI")
@@ -30,15 +35,32 @@ def main():
     
     args = parser.parse_args()
     
-    if args.debug:
-        logger.setLevel(logging.DEBUG)
-        
+    # Load config first to get logLevel
     logger.info(f"Loading configuration from {args.config}")
     try:
         config_data = load_config(args.config)
     except FileNotFoundError:
+        # Use basic logging for error before config is loaded
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(asctime)s - %(levelname)s - %(message)s',
+            handlers=[logging.StreamHandler(sys.stdout)]
+        )
         logger.error(f"Config file not found: {args.config}")
         sys.exit(1)
+    
+    # Configure logging from config
+    log_level = get_log_level(config_data.get('logLevel', 'INFO'))
+    if args.debug:
+        log_level = logging.DEBUG
+    
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(levelname)s - %(message)s',
+        handlers=[logging.StreamHandler(sys.stdout)],
+        force=True  # Override any existing configuration
+    )
+    logger.setLevel(log_level)
         
     # Override config with CLI args
     if args.drive_id:
@@ -61,6 +83,7 @@ def main():
         include_trashed=config_data['scan']['include_trashed'],
         include_shortcuts=config_data['scan']['include_shortcuts'],
         max_depth=config_data['scan'].get('max_depth'),
+        limit=config_data['scan'].get('limit'),
         public_folder_name=config_data['scan']['public_folder_name'],
         output_dir=config_data['output']['dir'],
         yaml_file=config_data['output']['yaml_file'],
@@ -80,15 +103,40 @@ def main():
     try:
         # 1. List all files
         logger.info("Listing files...")
-        raw_files = list(list_files(service, config.drive_id))
-        logger.info(f"Found {len(raw_files)} files/folders.")
+        raw_files = list(list_files(service, config.drive_id, limit=config.limit))
+        if config.limit:
+            logger.info(f"Found {len(raw_files)} files/folders (limited to {config.limit}).")
+        else:
+            logger.info(f"Found {len(raw_files)} files/folders.")
         
-        # 2. Build Tree & Process
+        # 2. Fetch permissions for each file
+        logger.info("Fetching permissions for files...")
+        files_with_perms = 0
+        total_perms = 0
+        for idx, file_data in enumerate(raw_files, 1):
+            file_id = file_data.get('id')
+            if file_id:
+                permissions = get_file_permissions(service, file_id)
+                file_data['permissions'] = permissions
+                if permissions:
+                    files_with_perms += 1
+                    total_perms += len(permissions)
+                if idx % 10 == 0:
+                    logger.debug(f"Fetched permissions for {idx}/{len(raw_files)} files...")
+        logger.info(f"Finished fetching permissions. {files_with_perms} files have permissions ({total_perms} total permissions).")
+        
+        # 3. Build Tree & Process
         logger.info("Processing files and building tree...")
         processed_files = build_file_tree(raw_files, config)
         logger.info(f"Processed {len(processed_files)} files after filtering.")
         
-        # 3. Export
+        # Debug: Check owners and permissions
+        files_with_owners = sum(1 for f in processed_files if f.owners)
+        files_with_permissions = sum(1 for f in processed_files if f.access and f.access.permissions)
+        total_permissions = sum(len(f.access.permissions) if f.access else 0 for f in processed_files)
+        logger.debug(f"Debug: {files_with_owners} files have owners, {files_with_permissions} files have permissions ({total_permissions} total).")
+        
+        # 4. Export
         if not os.path.exists(config.output_dir):
             os.makedirs(config.output_dir)
             

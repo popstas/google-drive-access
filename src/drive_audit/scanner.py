@@ -224,6 +224,18 @@ def build_file_tree(files_data: List[Dict[str, Any]], config: DriveConfig) -> Li
         is_shortcut = mime_type == 'application/vnd.google-apps.shortcut'
         shortcut_details = file_data.get('shortcutDetails', {})
         
+        # For Shared Drives, owners field is often empty
+        # Fallback: derive owners from permissions with organizer/owner role
+        owners = file_data.get('owners', [])
+        if not owners and permissions:
+            # Find permissions with organizer or owner role
+            for perm in permissions:
+                if perm.role in ['organizer', 'owner'] and perm.type == 'user' and perm.email:
+                    owners.append({
+                        'emailAddress': perm.email,
+                        'displayName': perm.display_name or perm.email
+                    })
+        
         file_info = FileInfo(
             id=file_id,
             name=name,
@@ -236,7 +248,7 @@ def build_file_tree(files_data: List[Dict[str, Any]], config: DriveConfig) -> Li
             trashed=file_data.get('trashed', False),
             starred=file_data.get('starred', False),
             size_bytes=int(file_data.get('size')) if file_data.get('size') else None,
-            owners=file_data.get('owners', []),
+            owners=owners,
             last_modifying_user=file_data.get('lastModifyingUser'),
             client_name=client_name,
             location=location,

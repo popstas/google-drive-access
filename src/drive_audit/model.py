@@ -12,6 +12,7 @@ class DriveConfig:
     include_trashed: bool
     include_shortcuts: bool
     max_depth: Optional[int]
+    limit: Optional[int]
     public_folder_name: str
     output_dir: str
     yaml_file: str

@@ -57,7 +57,7 @@ def save_yaml(files: List[FileInfo], config: DriveConfig, output_path: str):
             'trashed': f.trashed,
             'starred': f.starred,
             'size_bytes': f.size_bytes,
-            'owners': [{'email': o.get('emailAddress'), 'display_name': o.get('displayName')} for o in f.owners],
+            'owners': [{'email': o.get('emailAddress') if isinstance(o, dict) else None, 'display_name': o.get('displayName') if isinstance(o, dict) else None} for o in (f.owners or [])],
             'last_modifying_user': {
                 'email': f.last_modifying_user.get('emailAddress') if f.last_modifying_user else None,
                 'display_name': f.last_modifying_user.get('displayName') if f.last_modifying_user else None

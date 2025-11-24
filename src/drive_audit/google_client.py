@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import Optional, Generator, Any, Dict
+from typing import Optional, Generator, Any, Dict, List
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -32,29 +32,64 @@ def get_drive_info(service, drive_id: str) -> Dict[str, Any]:
         logger.error(f"An error occurred: {error}")
         raise
 
-def list_files(service, drive_id: str, page_size: int = 1000) -> Generator[Dict[str, Any], None, None]:
+def get_file_permissions(service, file_id: str) -> List[Dict[str, Any]]:
+    """Fetches permissions for a specific file."""
+    try:
+        permissions = []
+        page_token = None
+        
+        while True:
+            response = service.permissions().list(
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields='nextPageToken, permissions(id, type, role, emailAddress, domain, displayName, allowFileDiscovery, expirationTime, deleted, permissionDetails)',
+                pageToken=page_token
+            ).execute()
+            
+            permissions.extend(response.get('permissions', []))
+            
+            page_token = response.get('nextPageToken', None)
+            if page_token is None:
+                break
+                
+        return permissions
+    except HttpError as error:
+        logger.warning(f"Failed to fetch permissions for file {file_id}: {error}")
+        return []
+
+def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[int] = None) -> Generator[Dict[str, Any], None, None]:
     """Iterates over all files in the shared drive."""
     page_token = None
     query = "trashed = false"
+    count = 0
     
     # Fields to retrieve - optimized for performance
-    fields = "nextPageToken, files(id, name, mimeType, parents, createdTime, modifiedTime, viewedByMeTime, owners, lastModifyingUser, trashed, starred, size, shortcutDetails, permissions)"
+    # Note: permissions are not returned by files.list() - we need to fetch them separately
+    fields = "nextPageToken, files(id, name, mimeType, parents, createdTime, modifiedTime, viewedByMeTime, owners, lastModifyingUser, trashed, starred, size, shortcutDetails)"
 
     while True:
         try:
+            # Adjust page_size if we're near the limit
+            current_page_size = page_size
+            if limit and (limit - count) < page_size:
+                current_page_size = limit - count
+            
             response = service.files().list(
                 corpora='drive',
                 driveId=drive_id,
                 includeItemsFromAllDrives=True,
                 supportsAllDrives=True,
                 q=query,
-                pageSize=page_size,
+                pageSize=current_page_size,
                 fields=fields,
                 pageToken=page_token
             ).execute()
 
             for file in response.get('files', []):
                 yield file
+                count += 1
+                if limit and count >= limit:
+                    return
 
             page_token = response.get('nextPageToken', None)
             if page_token is None:
