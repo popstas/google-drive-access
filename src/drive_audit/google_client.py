@@ -102,7 +102,18 @@ def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[in
 
 
 def add_user_permission(service, file_id: str, email: str, role: str) -> Dict[str, Any]:
-    """Adds a permission for a user to a file or folder."""
+    """Adds a permission for a user to a file or folder.
+    
+    Note: The 'organizer' role is only valid at the shared drive level.
+    For files/folders within a shared drive, 'organizer' is automatically
+    converted to 'fileOrganizer'.
+    """
+    # Convert 'organizer' to 'fileOrganizer' for files/folders
+    # The 'organizer' role can only be used at the drive level, not on individual items
+    if role == "organizer":
+        role = "fileOrganizer"
+        logger.debug(f"Converted role 'organizer' to 'fileOrganizer' for file/folder {file_id}")
+    
     try:
         return service.permissions().create(
             fileId=file_id,

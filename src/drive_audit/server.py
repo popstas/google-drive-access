@@ -1,4 +1,5 @@
 import argparse
+import ast
 import json
 import logging
 import re
@@ -85,6 +86,44 @@ def extract_folder_id(folder_url: str) -> str:
     raise ValueError("Unable to extract folder_id from folder_url")
 
 
+def parse_assignee_ids(assignee_id: Any) -> List[str]:
+    """
+    Parse assignee_id which can be:
+    - A single value (string or number)
+    - A Python-style array string like "['7', '1']"
+    - A JSON array string like '["7", "1"]'
+    - An actual JSON array
+    """
+    if isinstance(assignee_id, list):
+        return [str(item) for item in assignee_id]
+
+    if isinstance(assignee_id, (int, float)):
+        return [str(assignee_id)]
+
+    assignee_id_str = str(assignee_id).strip()
+
+    # Try to parse as Python literal (handles "['7', '1']")
+    if assignee_id_str.startswith("[") or (assignee_id_str.startswith("'") and "[" in assignee_id_str):
+        try:
+            # First try Python literal eval (handles "['7', '1']")
+            parsed = ast.literal_eval(assignee_id_str)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+        except (ValueError, SyntaxError):
+            pass
+
+        # Try JSON parsing (handles '["7", "1"]')
+        try:
+            parsed = json.loads(assignee_id_str)
+            if isinstance(parsed, list):
+                return [str(item) for item in parsed]
+        except json.JSONDecodeError:
+            pass
+
+    # Single value
+    return [assignee_id_str]
+
+
 def collect_google_accounts(planfix_client: PlanfixClient, assignee_ids: List[str]) -> List[str]:
     google_accounts: List[str] = []
     seen_accounts = set()
@@ -126,12 +165,12 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
         def _authenticate(self) -> bool:
             auth_header = self.headers.get("Authorization", "")
             if not auth_header.startswith("Bearer "):
-                self._send_json(401, {"error": "Missing or invalid Authorization header"})
+                self._send_json(200, {"answer": "Missing or invalid Authorization header"})
                 return False
 
             token = auth_header.split(" ", 1)[1]
             if token != http_config.token:
-                self._send_json(403, {"error": "Invalid token"})
+                self._send_json(200, {"answer": "Invalid token"})
                 return False
             return True
 
@@ -147,7 +186,7 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
 
         def do_POST(self) -> None:  # noqa: N802
             if self.path != "/set_client_folder_access":
-                self._send_json(404, {"error": "Not found"})
+                self._send_json(200, {"answer": "Not found"})
                 return
 
             if not self._authenticate():
@@ -156,42 +195,39 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             try:
                 payload = self._parse_body()
             except ValueError as exc:
-                self._send_json(400, {"error": str(exc)})
+                self._send_json(200, {"answer": str(exc)})
                 return
 
             required_fields = ["contact_id", "folder_url", "task_id", "assignee_id"]
             missing_fields = [field for field in required_fields if field not in payload]
             if missing_fields:
-                self._send_json(400, {"error": f"Missing fields: {', '.join(missing_fields)}"})
+                self._send_json(200, {"answer": f"Missing fields: {', '.join(missing_fields)}"})
                 return
 
             try:
                 task_id = int(payload["task_id"])
-                assignee_id = str(payload["assignee_id"])
+                initial_assignee_ids = parse_assignee_ids(payload["assignee_id"])
                 folder_id = extract_folder_id(str(payload["folder_url"]))
 
                 tasks = planfix_client.get_child_tasks(task_id)
-                assignee_ids = PlanfixClient.collect_assignee_ids(tasks, assignee_id)
+                assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
                 google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
                 permission_results = set_permissions(service, folder_id, google_accounts, role)
             except ValueError as exc:
-                self._send_json(400, {"error": str(exc)})
+                self._send_json(200, {"answer": str(exc)})
                 return
             except Exception as exc:  # pylint: disable=broad-except
                 logger.exception("Failed to process request: %s", exc)
-                self._send_json(500, {"error": "Internal server error"})
+                self._send_json(200, {"answer": "Internal server error"})
                 return
 
             self._send_json(
                 200,
                 {
-                    "contact_id": payload["contact_id"],
-                    "folder_id": folder_id,
-                    "assignee_ids": sorted(assignee_ids),
-                    "google_accounts": google_accounts,
-                    "permissions": permission_results,
-                },
+                    "answer": f"Access granted for {', '.join(google_accounts)}"
+                }
             )
+            
 
     return AccessHandler
 

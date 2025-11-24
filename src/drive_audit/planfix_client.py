@@ -37,7 +37,7 @@ class PlanfixClient:
         return tasks
 
     def get_manager(self, assignee_id: str) -> Dict[str, Any]:
-        payload = {"id": assignee_id}
+        payload = {"id": int(assignee_id)}
         logger.debug("Fetching manager for assignee_id=%s", assignee_id)
         response = requests.post(
             self._config.get_manager.url,
@@ -51,7 +51,7 @@ class PlanfixClient:
         return manager
 
     @staticmethod
-    def collect_assignee_ids(tasks: List[Dict[str, Any]], initial_assignee_id: str) -> Set[str]:
+    def collect_assignee_ids(tasks: List[Dict[str, Any]], initial_assignee_ids: List[str]) -> Set[str]:
         assignee_ids: Set[str] = set()
         for task in tasks:
             users = task.get("assignees", {}).get("users", [])
@@ -59,5 +59,6 @@ class PlanfixClient:
                 user_id = user.get("id", "")
                 if user_id.startswith("user:"):
                     assignee_ids.add(user_id.split(":", 1)[1])
-        assignee_ids.add(str(initial_assignee_id))
+        for initial_assignee_id in initial_assignee_ids:
+            assignee_ids.add(str(initial_assignee_id))
         return assignee_ids
