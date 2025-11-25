@@ -100,10 +100,18 @@ def move_files_to_public_folder(
                 logger.debug("File %s (%s) already in public folder", name, file_data.get("id"))
                 continue
 
-            matched_files.append(file_data)
+            matched_files.append(
+                {
+                    "file": file_data,
+                    "public_folder": public_folder,
+                    "client_name": client_name,
+                }
+            )
 
     moved_files: List[Dict[str, Any]] = []
-    for file_data in matched_files:
+    for match in matched_files:
+        file_data = match["file"]
+        public_folder = match["public_folder"]
         file_id = file_data.get("id")
         if not file_id:
             logger.debug("Skipping file without id: %s", file_data)
@@ -114,25 +122,38 @@ def move_files_to_public_folder(
             logger.warning("File %s (%s) has no parents; skipping", file_data.get("name"), file_id)
             continue
 
+        destination_parent = public_folder["id"]
+        destination_path = f"{match['client_name']}/{public_folder.get('name', drive_config.public_subdir)}"
+
         if dry_run:
             logger.info(
-                "[dry-run] Would move %s (%s) from %s to %s",
+                "[dry-run] Would move %s (%s) from %s to %s (%s)",
                 file_data.get("name"),
                 file_id,
                 ",".join(parents),
-                public_folder["id"],
+                destination_parent,
+                destination_path,
             )
-            moved_files.append({"file_id": file_id, "new_parent": public_folder["id"], "dry_run": True})
+            moved_files.append(
+                {
+                    "file_id": file_id,
+                    "new_parent": destination_parent,
+                    "destination_path": destination_path,
+                    "dry_run": True,
+                }
+            )
             continue
 
-        updated = move_file(service, file_id, public_folder["id"], parents)
+        updated = move_file(service, file_id, destination_parent, parents)
+        updated["destination_path"] = destination_path
         moved_files.append(updated)
         logger.info(
-            "Moved %s (%s) from %s to %s",
+            "Moved %s (%s) from %s to %s (%s)",
             file_data.get("name"),
             file_id,
             ",".join(parents),
-            public_folder["id"],
+            destination_parent,
+            destination_path,
         )
 
     return moved_files

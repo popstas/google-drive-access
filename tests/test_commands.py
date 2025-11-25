@@ -118,6 +118,60 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
     assert public_calls == ["client"]
 
 
+def test_move_files_to_client_public_folder(monkeypatch):
+    drive_config = build_drive_config()
+
+    public_calls = []
+
+    def fake_ensure_public_subdir(service, parent_id, subdir_name, drive_id):
+        public_calls.append(parent_id)
+        return {"id": f"public-{parent_id}", "name": subdir_name}
+
+    monkeypatch.setattr(
+        "src.drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
+    )
+
+    root_children = [
+        {"id": "client-a", "name": "Client A", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+        {"id": "client-b", "name": "Client B", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+    ]
+
+    client_files = {
+        "client-a": [
+            {"id": "a1", "name": "KP_report.xlsx", "mimeType": "application/vnd.ms-excel", "parents": ["client-a"]},
+        ],
+        "client-b": [
+            {"id": "b1", "name": "Public Report.csv", "mimeType": "text/csv", "parents": ["client-b"]},
+        ],
+    }
+
+    def fake_list_folder_children(service, folder_id, drive_id):
+        if folder_id == "root":
+            return root_children
+        return client_files.get(folder_id, [])
+
+    monkeypatch.setattr("src.drive_audit.commands.list_folder_children", fake_list_folder_children)
+
+    moved = []
+
+    def fake_move_file(service, file_id, new_parent, previous_parents):
+        moved.append((file_id, new_parent, previous_parents))
+        return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
+
+    monkeypatch.setattr("src.drive_audit.commands.move_file", fake_move_file)
+
+    results = move_files_to_public_folder(
+        None, drive_config, ["KP", "^Public Report\\.csv$"] , dry_run=False
+    )
+
+    assert len(results) == 2
+    assert moved == [
+        ("a1", "public-client-a", ["client-a"]),
+        ("b1", "public-client-b", ["client-b"]),
+    ]
+    assert public_calls == ["client-a", "client-b"]
+
+
 def test_move_files_to_public_folder_requires_patterns(monkeypatch):
     drive_config = build_drive_config()
     monkeypatch.setattr(
