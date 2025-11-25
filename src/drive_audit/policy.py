@@ -10,14 +10,15 @@ def check_policy(file_info: FileInfo, config: DriveConfig) -> PolicyInfo:
     
     # Check if under public folder based on location
     # Location format: /ClientName/public/file.txt or /ClientName/public
-    # We check if 'public_folder_name' is a segment in the path
+    # We check if the configured public subdir is a segment in the path
     # Requirement: "True, если путь имеет вид "/<Client>/public/..." или папка public вторая в пути"
-    
+
     parts = file_info.location.strip('/').split('/')
+    public_segment = config.public_subdir or "public"
     if len(parts) >= 2:
         # Check if the second segment (index 1) is the public folder name
         # parts[0] is ClientName, parts[1] should be public folder
-        if parts[1] == config.public_folder_name:
+        if parts[1] == public_segment:
             is_under_public_folder = True
     
     is_public_anyone = False

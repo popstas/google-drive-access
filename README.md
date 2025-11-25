@@ -59,8 +59,7 @@ drive:
 scan:
   include_trashed: false
   include_shortcuts: true
-  public_folder_name: "public"
-  publicSubdir: "public"
+  public_subdir: "public"
 
 output:
   dir: "./data"
@@ -69,7 +68,7 @@ output:
   permissions_csv: "permissions.csv"
 ```
 
-Set `publicSubdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
+Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
 
 ## Output
 Files are saved to the `output.dir` (default `./data`):

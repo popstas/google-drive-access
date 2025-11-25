@@ -26,7 +26,7 @@ def save_yaml(files: List[FileInfo], config: DriveConfig, output_path: str):
         'config': {
             'include_trashed': config.include_trashed,
             'include_shortcuts': config.include_shortcuts,
-            'public_folder_name': config.public_folder_name,
+            'public_subdir': config.public_subdir,
             'max_depth': config.max_depth
         },
         'documents': []

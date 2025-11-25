@@ -33,7 +33,6 @@ class DriveConfig:
     include_shortcuts: bool
     max_depth: Optional[int]
     limit: Optional[int]
-    public_folder_name: str
     public_subdir: Optional[str]
     output_dir: str
     yaml_file: str
