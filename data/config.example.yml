@@ -12,6 +12,7 @@ scan:
   include_shortcuts: true
   max_depth: null
   public_folder_name: "public"
+  publicSubdir: "public"
 
 output:
   dir: "./data"

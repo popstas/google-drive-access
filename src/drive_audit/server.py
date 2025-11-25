@@ -9,7 +9,7 @@ from urllib.parse import parse_qs, urlparse
 
 import yaml
 
-from .google_client import add_user_permission, get_service
+from .google_client import add_user_permission, ensure_public_subdir, get_service
 from .model import DriveConfig, HttpConfig, PlanfixConfig, PlanfixEndpointConfig
 from .planfix_client import PlanfixClient
 
@@ -66,6 +66,7 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
         max_depth=scan_section.get("max_depth"),
         limit=scan_section.get("limit"),
         public_folder_name=scan_section.get("public_folder_name", "public"),
+        public_subdir=scan_section.get("publicSubdir"),
         output_dir=output_section.get("dir", "./data"),
         yaml_file=output_section.get("yaml_file", "drive_audit.yml"),
         files_csv=output_section.get("files_csv", "files.csv"),
@@ -149,7 +150,7 @@ def set_permissions(service, folder_id: str, google_accounts: List[str], role: s
     return results
 
 
-def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConfig, role: str):
+def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConfig, drive_config: DriveConfig, role: str):
     class AccessHandler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             logger.info("%s - %s", self.address_string(), format % args)
@@ -209,6 +210,9 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 initial_assignee_ids = parse_assignee_ids(payload["assignee_id"])
                 folder_id = extract_folder_id(str(payload["folder_url"]))
 
+                if drive_config.public_subdir:
+                    ensure_public_subdir(service, folder_id, drive_config.public_subdir, drive_config.drive_id)
+
                 tasks = planfix_client.get_child_tasks(task_id)
                 assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
                 google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
@@ -249,7 +253,7 @@ def main() -> None:
     service = get_service(drive_config)
     planfix_client = PlanfixClient(planfix_config)
 
-    handler = create_handler(planfix_client, service, http_config, planfix_config.role)
+    handler = create_handler(planfix_client, service, http_config, drive_config, planfix_config.role)
     server = HTTPServer(("", http_config.port), handler)
     logger.info("Starting HTTP server on port %s", http_config.port)
     try:

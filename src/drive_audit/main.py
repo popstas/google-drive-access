@@ -85,6 +85,7 @@ def main():
         max_depth=config_data['scan'].get('max_depth'),
         limit=config_data['scan'].get('limit'),
         public_folder_name=config_data['scan']['public_folder_name'],
+        public_subdir=config_data['scan'].get('publicSubdir'),
         output_dir=config_data['output']['dir'],
         yaml_file=config_data['output']['yaml_file'],
         files_csv=config_data['output']['files_csv'],
