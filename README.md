@@ -61,6 +61,14 @@ scan:
   include_shortcuts: true
   public_subdir: "public"
 
+commands:
+  move_files_to_public_folder:
+    file_match:
+      - ".*?KP.*?\\.xlsx"
+      - "^Public Report\\.csv$"
+  move_files_csv:
+    csv_file: "data/move_files.csv"
+
 output:
   dir: "./data"
   yaml_file: "drive_audit.yml"
@@ -85,6 +93,37 @@ http:
 ```
 
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
+
+## Commands
+
+### move_files_to_public_folder
+
+Move files that sit at the second level of the shared drive (directly inside each client folder under the configured `drive.root_folder_id`) into that client's `public_subdir` when their names match any of the regular expressions listed in `commands.move_files_to_public_folder.file_match` (case-insensitive).
+
+- Uses `ensure_public_subdir` to create and share the public folder **inside each client folder** if it does not exist.
+- Writes command logs to `data/move_files_to_public_folder.log` alongside console output.
+- Respects the `--dry-run` flag to log intended moves without changing Google Drive.
+
+Run the command:
+
+```bash
+python -m src.drive_audit.commands --config data/config.yml move_files_to_public_folder --dry-run
+```
+
+### move_files_csv
+
+Move an explicit set of files listed in a comma-separated manifest (see `data/move_files.csv`). Each manifest row must include `file_name`, `file_id`, and `dest_folder` (target folder ID inside Google Drive). An optional `source_folder` column can help operators review the origin.
+
+- Reads the manifest path from `commands.move_files_csv.csv_file` (overridable via `--csv-file`).
+- Uses the provided `dest_folder` directly; public subfolders are not discovered automatically.
+- Writes command logs to `data/move_files_csv.log`.
+- Supports `--dry-run` to preview all moves without changing Google Drive.
+
+Run the command:
+
+```bash
+python -m src.drive_audit.commands --config data/config.yml move_files_csv --dry-run
+```
 
 ## HTTP server endpoints
 

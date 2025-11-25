@@ -13,6 +13,14 @@ scan:
   max_depth: null
   public_subdir: "public"
 
+commands:
+  move_files_to_public_folder:
+    file_match:
+      - ".*?KP.*?\\.xlsx"
+      - "^Public Report\\.csv$"
+  move_files_csv:
+    csv_file: "data/move_files.csv"
+
 output:
   dir: "./data"
   yaml_file: "drive_audit.yml"
@@ -34,5 +42,6 @@ planfix:
 http:
   port: 7587
   token: skldjfh
+
 
 

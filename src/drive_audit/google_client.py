@@ -210,3 +210,49 @@ def ensure_public_subdir(service, parent_id: str, subdir_name: str, drive_id: st
 
     ensure_public_permission(service, folder['id'])
     return folder
+
+
+def list_folder_children(service, folder_id: str, drive_id: str, page_size: int = 100) -> Generator[Dict[str, Any], None, None]:
+    """Yield direct children of a folder."""
+    page_token = None
+    query = f"'{folder_id}' in parents and trashed = false"
+    fields = "nextPageToken, files(id, name, mimeType, parents)"
+
+    while True:
+        try:
+            response = service.files().list(
+                corpora='drive',
+                driveId=drive_id,
+                includeItemsFromAllDrives=True,
+                supportsAllDrives=True,
+                q=query,
+                pageSize=page_size,
+                fields=fields,
+                pageToken=page_token
+            ).execute()
+
+            for file in response.get('files', []):
+                yield file
+
+            page_token = response.get('nextPageToken')
+            if not page_token:
+                break
+        except HttpError as error:
+            logger.error("An error occurred while listing children for %s: %s", folder_id, error)
+            raise
+
+
+def move_file(service, file_id: str, new_parent_id: str, current_parents: List[str]) -> Dict[str, Any]:
+    """Move a file to a new parent, removing existing parents."""
+    remove_parents = ','.join(str(parent) for parent in current_parents)
+    try:
+        return service.files().update(
+            fileId=file_id,
+            addParents=new_parent_id,
+            removeParents=remove_parents,
+            supportsAllDrives=True,
+            fields='id, parents'
+        ).execute()
+    except HttpError as error:
+        logger.error("Failed to move file %s to %s: %s", file_id, new_parent_id, error)
+        raise

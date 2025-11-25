@@ -9,3 +9,5 @@ Create name using angular commit message format.
 ## Rules on new features:
 - Add documentation for new features to README.md
 - Add new config variables to config.example.yml
+
+Shared drive structure: Level 1: clients folders. Folder names as client name. Level 2+: client's files
