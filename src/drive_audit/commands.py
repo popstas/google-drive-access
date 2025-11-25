@@ -2,6 +2,7 @@ import argparse
 import logging
 import re
 import sys
+from pathlib import Path
 from typing import Any, Dict, List
 
 from .google_client import (
@@ -62,24 +63,39 @@ def move_files_to_public_folder(
         service, drive_config.root_folder_id, drive_config.public_subdir, drive_config.drive_id
     )
 
+    folder_mime = "application/vnd.google-apps.folder"
     matched_files: List[Dict[str, Any]] = []
-    for file_data in list_folder_children(service, drive_config.root_folder_id, drive_config.drive_id):
-        name = file_data.get("name", "")
-        mime_type = file_data.get("mimeType", "")
-        parents = file_data.get("parents", [])
-
-        if mime_type == "application/vnd.google-apps.folder":
-            logger.debug("Skipping folder %s (%s)", name, file_data.get("id"))
+    for client_folder in list_folder_children(
+        service, drive_config.root_folder_id, drive_config.drive_id
+    ):
+        client_name = client_folder.get("name", "")
+        client_folder_id = client_folder.get("id")
+        if client_folder.get("mimeType") != folder_mime or not client_folder_id:
+            logger.debug(
+                "Skipping non-folder item %s (%s) at root level", client_name, client_folder_id
+            )
             continue
 
-        if not any(pattern.search(name) for pattern in patterns):
-            continue
+        logger.debug("Scanning client folder %s (%s)", client_name, client_folder_id)
+        for file_data in list_folder_children(service, client_folder_id, drive_config.drive_id):
+            name = file_data.get("name", "")
+            mime_type = file_data.get("mimeType", "")
+            parents = file_data.get("parents", [])
 
-        if public_folder["id"] in parents:
-            logger.debug("File %s (%s) already in public folder", name, file_data.get("id"))
-            continue
+            if mime_type == folder_mime:
+                logger.debug(
+                    "Skipping subfolder %s (%s) under %s", name, file_data.get("id"), client_name
+                )
+                continue
 
-        matched_files.append(file_data)
+            if not any(pattern.search(name) for pattern in patterns):
+                continue
+
+            if public_folder["id"] in parents:
+                logger.debug("File %s (%s) already in public folder", name, file_data.get("id"))
+                continue
+
+            matched_files.append(file_data)
 
     moved_files: List[Dict[str, Any]] = []
     for file_data in matched_files:
@@ -142,10 +158,16 @@ def main() -> None:
     if args.debug:
         log_level = logging.DEBUG
 
+    log_handlers = [logging.StreamHandler(sys.stdout)]
+
+    log_file_path = Path("data") / "move_files_to_public_folder.log"
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
+    log_handlers.append(logging.FileHandler(log_file_path))
+
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=log_handlers,
         force=True,
     )
     logger.setLevel(log_level)

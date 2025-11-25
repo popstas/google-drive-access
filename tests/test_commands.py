@@ -30,13 +30,26 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
         "src.drive_audit.commands.ensure_public_subdir", lambda *args, **kwargs: public_folder
     )
 
-    files = [
-        {"id": "1", "name": "KP_report.xlsx", "mimeType": "application/vnd.ms-excel", "parents": ["root"]},
-        {"id": "2", "name": "Public Report.csv", "mimeType": "text/csv", "parents": ["root"]},
-        {"id": "3", "name": "notes.txt", "mimeType": "text/plain", "parents": ["root"]},
-        {"id": "4", "name": "child", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+    root_children = [
+        {"id": "client", "name": "Client", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+        {"id": "loose", "name": "Loose", "mimeType": "text/plain", "parents": ["root"]},
     ]
-    monkeypatch.setattr("src.drive_audit.commands.list_folder_children", lambda *args, **kwargs: files)
+
+    client_files = [
+        {"id": "1", "name": "KP_report.xlsx", "mimeType": "application/vnd.ms-excel", "parents": ["client"]},
+        {"id": "2", "name": "Public Report.csv", "mimeType": "text/csv", "parents": ["client"]},
+        {"id": "3", "name": "notes.txt", "mimeType": "text/plain", "parents": ["client"]},
+        {"id": "4", "name": "child", "mimeType": "application/vnd.google-apps.folder", "parents": ["client"]},
+    ]
+
+    def fake_list_folder_children(service, folder_id, drive_id):
+        if folder_id == "root":
+            return root_children
+        if folder_id == "client":
+            return client_files
+        return []
+
+    monkeypatch.setattr("src.drive_audit.commands.list_folder_children", fake_list_folder_children)
 
     moved = []
 
@@ -51,7 +64,7 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     )
 
     assert len(results) == 2
-    assert moved == [("1", "public", ["root"]), ("2", "public", ["root"])]
+    assert moved == [("1", "public", ["client"]), ("2", "public", ["client"])]
 
 
 def test_move_files_to_public_folder_requires_patterns(monkeypatch):
