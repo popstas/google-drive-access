@@ -158,11 +158,14 @@ def main() -> None:
     if args.debug:
         log_level = logging.DEBUG
 
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8")
+
     log_handlers = [logging.StreamHandler(sys.stdout)]
 
     log_file_path = Path("data") / "move_files_to_public_folder.log"
     log_file_path.parent.mkdir(parents=True, exist_ok=True)
-    log_handlers.append(logging.FileHandler(log_file_path))
+    log_handlers.append(logging.FileHandler(log_file_path, encoding="utf-8"))
 
     logging.basicConfig(
         level=log_level,
