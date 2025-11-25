@@ -13,6 +13,10 @@ scan:
   max_depth: null
   public_subdir: "public"
 
+commands:
+  move_files_to_public_folder:
+    file_match: ".*?KP.*?\\.xlsx"
+
 output:
   dir: "./data"
   yaml_file: "drive_audit.yml"
