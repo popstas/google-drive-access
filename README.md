@@ -96,9 +96,9 @@ Set `public_subdir` to the name of a public-facing subfolder you want to enforce
 
 ### move_files_to_public_folder
 
-Move files that sit at the second level of the shared drive (directly inside each client folder under the configured `drive.root_folder_id`) into the configured `public_subdir` when their names match any of the regular expressions listed in `commands.move_files_to_public_folder.file_match` (case-insensitive).
+Move files that sit at the second level of the shared drive (directly inside each client folder under the configured `drive.root_folder_id`) into that client's `public_subdir` when their names match any of the regular expressions listed in `commands.move_files_to_public_folder.file_match` (case-insensitive).
 
-- Uses `ensure_public_subdir` to create and share the public folder if it does not exist.
+- Uses `ensure_public_subdir` to create and share the public folder **inside each client folder** if it does not exist.
 - Writes command logs to `data/move_files_to_public_folder.log` alongside console output.
 - Respects the `--dry-run` flag to log intended moves without changing Google Drive.
 

@@ -59,12 +59,10 @@ def move_files_to_public_folder(
         raise ValueError("file_matches entries must be strings")
 
     patterns = [re.compile(pattern, re.IGNORECASE) for pattern in file_matches]
-    public_folder = ensure_public_subdir(
-        service, drive_config.root_folder_id, drive_config.public_subdir, drive_config.drive_id
-    )
 
     folder_mime = "application/vnd.google-apps.folder"
     matched_files: List[Dict[str, Any]] = []
+    public_folders: Dict[str, Dict[str, Any]] = {}
     for client_folder in list_folder_children(
         service, drive_config.root_folder_id, drive_config.drive_id
     ):
@@ -90,6 +88,13 @@ def move_files_to_public_folder(
 
             if not any(pattern.search(name) for pattern in patterns):
                 continue
+
+            public_folder = public_folders.get(client_folder_id)
+            if not public_folder:
+                public_folder = ensure_public_subdir(
+                    service, client_folder_id, drive_config.public_subdir, drive_config.drive_id
+                )
+                public_folders[client_folder_id] = public_folder
 
             if public_folder["id"] in parents:
                 logger.debug("File %s (%s) already in public folder", name, file_data.get("id"))

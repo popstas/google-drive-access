@@ -25,9 +25,14 @@ def build_drive_config() -> DriveConfig:
 def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     drive_config = build_drive_config()
 
-    public_folder = {"id": "public"}
+    public_calls = []
+
+    def fake_ensure_public_subdir(service, parent_id, subdir_name, drive_id):
+        public_calls.append(parent_id)
+        return {"id": f"public-{parent_id}"}
+
     monkeypatch.setattr(
-        "src.drive_audit.commands.ensure_public_subdir", lambda *args, **kwargs: public_folder
+        "src.drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
     )
 
     root_children = [
@@ -64,15 +69,21 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     )
 
     assert len(results) == 2
-    assert moved == [("1", "public", ["client"]), ("2", "public", ["client"])]
+    assert moved == [("1", "public-client", ["client"]), ("2", "public-client", ["client"])]
+    assert public_calls == ["client"]
 
 
 def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
     drive_config = build_drive_config()
 
-    public_folder = {"id": "public"}
+    public_calls = []
+
+    def fake_ensure_public_subdir(service, parent_id, subdir_name, drive_id):
+        public_calls.append(parent_id)
+        return {"id": f"public-{parent_id}"}
+
     monkeypatch.setattr(
-        "src.drive_audit.commands.ensure_public_subdir", lambda *args, **kwargs: public_folder
+        "src.drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
     )
 
     root_children = [
@@ -103,7 +114,8 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
     results = move_files_to_public_folder(None, drive_config, ["kp.*\\.xlsx"], dry_run=False)
 
     assert len(results) == 1
-    assert moved == [("10", "public", ["client"])]
+    assert moved == [("10", "public-client", ["client"])]
+    assert public_calls == ["client"]
 
 
 def test_move_files_to_public_folder_requires_patterns(monkeypatch):
