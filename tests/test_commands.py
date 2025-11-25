@@ -67,6 +67,45 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     assert moved == [("1", "public", ["client"]), ("2", "public", ["client"])]
 
 
+def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
+    drive_config = build_drive_config()
+
+    public_folder = {"id": "public"}
+    monkeypatch.setattr(
+        "src.drive_audit.commands.ensure_public_subdir", lambda *args, **kwargs: public_folder
+    )
+
+    root_children = [
+        {"id": "client", "name": "Client", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+    ]
+
+    client_files = [
+        {"id": "10", "name": "kp_summary.XLSX", "mimeType": "application/vnd.ms-excel", "parents": ["client"]},
+    ]
+
+    def fake_list_folder_children(service, folder_id, drive_id):
+        if folder_id == "root":
+            return root_children
+        if folder_id == "client":
+            return client_files
+        return []
+
+    monkeypatch.setattr("src.drive_audit.commands.list_folder_children", fake_list_folder_children)
+
+    moved = []
+
+    def fake_move_file(service, file_id, new_parent, previous_parents):
+        moved.append((file_id, new_parent, previous_parents))
+        return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
+
+    monkeypatch.setattr("src.drive_audit.commands.move_file", fake_move_file)
+
+    results = move_files_to_public_folder(None, drive_config, ["kp.*\\.xlsx"], dry_run=False)
+
+    assert len(results) == 1
+    assert moved == [("10", "public", ["client"])]
+
+
 def test_move_files_to_public_folder_requires_patterns(monkeypatch):
     drive_config = build_drive_config()
     monkeypatch.setattr(

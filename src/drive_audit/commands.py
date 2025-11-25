@@ -58,7 +58,7 @@ def move_files_to_public_folder(
     if not all(isinstance(pattern, str) for pattern in file_matches):
         raise ValueError("file_matches entries must be strings")
 
-    patterns = [re.compile(pattern) for pattern in file_matches]
+    patterns = [re.compile(pattern, re.IGNORECASE) for pattern in file_matches]
     public_folder = ensure_public_subdir(
         service, drive_config.root_folder_id, drive_config.public_subdir, drive_config.drive_id
     )
