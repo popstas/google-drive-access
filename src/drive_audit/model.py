@@ -13,6 +13,7 @@ class PlanfixEndpointConfig:
 class PlanfixConfig:
     get_child_tasks: PlanfixEndpointConfig
     get_manager: PlanfixEndpointConfig
+    get_client_task: PlanfixEndpointConfig
     role: str
 
 

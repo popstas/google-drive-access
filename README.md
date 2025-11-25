@@ -66,9 +66,36 @@ output:
   yaml_file: "drive_audit.yml"
   files_csv: "files.csv"
   permissions_csv: "permissions.csv"
+
+planfix:
+  getChildTasks:
+    url: https://api.example.com/tasks
+    token: skldjfh
+  getManager:
+    url: https://api.example.com/manager
+    token: skldjfh
+  getClientTask:
+    url: https://api.example.com/client-task
+    token: skldjfh
+  role: "writer"
+
+http:
+  port: 7587
+  token: skldjfh
 ```
 
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
+
+## HTTP server endpoints
+
+The HTTP server (see `src/drive_audit/server.py`) exposes authenticated endpoints for managing client folders. All successful responses use HTTP status 200 and include an `answer` field.
+
+- `POST /set_client_folder_access` — Grants access to an existing folder using Planfix task context.
+  - Body fields: `contact_id`, `folder_url`, `task_id`, `assignee_id`.
+  - Behavior: loads child tasks from Planfix, collects assignee Google accounts, optionally ensures the configured `public_subdir` exists under the target folder, and grants the configured Planfix role to those accounts.
+- `POST /create_client_folder` — Creates a client folder and applies access based on the client's Planfix task.
+  - Body fields: `contact_id`, `folder_name`.
+  - Behavior: looks up the client's task via `planfix.getClientTask`. If no task is found, returns `"Client task not found"`. If a folder with the same name already exists under the configured root folder, returns `"Folder already exists"`. Otherwise, creates the folder under the configured root folder, ensures the `public_subdir` if configured, and grants access using the task's assignees and child tasks.
 
 ## Output
 Files are saved to the `output.dir` (default `./data`):
