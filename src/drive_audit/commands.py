@@ -44,11 +44,20 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
     )
 
 
-def move_files_to_public_folder(service, drive_config: DriveConfig, file_match: str, dry_run: bool) -> List[Dict[str, Any]]:
+def move_files_to_public_folder(
+    service, drive_config: DriveConfig, file_matches: Any, dry_run: bool
+) -> List[Dict[str, Any]]:
     if not drive_config.public_subdir:
         raise ValueError("public_subdir must be configured to move files to a public folder")
 
-    pattern = re.compile(file_match)
+    if isinstance(file_matches, str):
+        file_matches = [file_matches]
+    if not isinstance(file_matches, list) or not file_matches:
+        raise ValueError("file_matches must be a non-empty list of regex patterns")
+    if not all(isinstance(pattern, str) for pattern in file_matches):
+        raise ValueError("file_matches entries must be strings")
+
+    patterns = [re.compile(pattern) for pattern in file_matches]
     public_folder = ensure_public_subdir(
         service, drive_config.root_folder_id, drive_config.public_subdir, drive_config.drive_id
     )
@@ -63,7 +72,7 @@ def move_files_to_public_folder(service, drive_config: DriveConfig, file_match: 
             logger.debug("Skipping folder %s (%s)", name, file_data.get("id"))
             continue
 
-        if not pattern.search(name):
+        if not any(pattern.search(name) for pattern in patterns):
             continue
 
         if public_folder["id"] in parents:
@@ -146,12 +155,21 @@ def main() -> None:
 
     if args.command == "move_files_to_public_folder":
         command_config = config_data.get("commands", {}).get("move_files_to_public_folder", {})
-        file_match = command_config.get("file_match")
+        configured_patterns = command_config.get("file_match")
 
-        if not file_match:
+        if not configured_patterns:
             raise ValueError("commands.move_files_to_public_folder.file_match must be configured")
 
-        moved_files = move_files_to_public_folder(service, drive_config, file_match, args.dry_run)
+        if isinstance(configured_patterns, str):
+            file_matches = [configured_patterns]
+        elif isinstance(configured_patterns, list) and all(
+            isinstance(pattern, str) for pattern in configured_patterns
+        ):
+            file_matches = configured_patterns
+        else:
+            raise ValueError("commands.move_files_to_public_folder.file_match must be a string or list of strings")
+
+        moved_files = move_files_to_public_folder(service, drive_config, file_matches, args.dry_run)
         logger.info("%s files processed", len(moved_files))
     else:
         raise ValueError(f"Unknown command: {args.command}")

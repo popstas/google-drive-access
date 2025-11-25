@@ -15,7 +15,9 @@ scan:
 
 commands:
   move_files_to_public_folder:
-    file_match: ".*?KP.*?\\.xlsx"
+    file_match:
+      - ".*?KP.*?\\.xlsx"
+      - "^Public Report\\.csv$"
 
 output:
   dir: "./data"

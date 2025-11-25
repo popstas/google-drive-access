@@ -63,7 +63,9 @@ scan:
 
 commands:
   move_files_to_public_folder:
-    file_match: ".*?KP.*?\\.xlsx"
+    file_match:
+      - ".*?KP.*?\\.xlsx"
+      - "^Public Report\\.csv$"
 
 output:
   dir: "./data"
@@ -94,7 +96,7 @@ Set `public_subdir` to the name of a public-facing subfolder you want to enforce
 
 ### move_files_to_public_folder
 
-Move files that sit directly under the configured `drive.root_folder_id` into the configured `public_subdir` when their names match the `commands.move_files_to_public_folder.file_match` regular expression.
+Move files that sit directly under the configured `drive.root_folder_id` into the configured `public_subdir` when their names match any of the regular expressions listed in `commands.move_files_to_public_folder.file_match`.
 
 - Uses `ensure_public_subdir` to create and share the public folder if it does not exist.
 - Respects the `--dry-run` flag to log intended moves without changing Google Drive.
