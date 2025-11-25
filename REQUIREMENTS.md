@@ -73,7 +73,7 @@ scan:
   include_trashed: false                     # по ТЗ - всегда false
   include_shortcuts: true
   max_depth: null                            # без ограничения по глубине
-  public_folder_name: "public"               # имя public-папок
+  public_subdir: "public"                    # имя public-папок
 
 output:
   dir: "./data"
@@ -116,7 +116,7 @@ drive:
 config:
   include_trashed: <bool>
   include_shortcuts: <bool>
-  public_folder_name: <string>
+  public_subdir: <string|null>
   max_depth: <int|null>
 
 documents:
@@ -344,7 +344,7 @@ documents:
 
 ### 5.7. Логика политики (public-папки и нарушения)
 
-На основе `location` и `config.public_folder_name`:
+На основе `location` и `config.public_subdir` (или значения по умолчанию `"public"`):
 
 1. `is_under_public_folder`:
 

@@ -128,3 +128,85 @@ def add_user_permission(service, file_id: str, email: str, role: str) -> Dict[st
     except HttpError as error:
         logger.error(f"Failed to add permission for {email} on {file_id}: {error}")
         raise
+
+
+def find_child_folder(service, parent_id: str, name: str, drive_id: str) -> Optional[Dict[str, Any]]:
+    """Find a child folder with the given name under the specified parent."""
+    query = (
+        f"'{parent_id}' in parents and "
+        "mimeType = 'application/vnd.google-apps.folder' and "
+        f"name = '{name}' and trashed = false"
+    )
+    try:
+        response = service.files().list(
+            corpora='drive',
+            driveId=drive_id,
+            includeItemsFromAllDrives=True,
+            supportsAllDrives=True,
+            q=query,
+            fields='files(id, name)'
+        ).execute()
+        files = response.get('files', [])
+        if files:
+            return files[0]
+        return None
+    except HttpError as error:
+        logger.error("Failed to search for folder %s under %s: %s", name, parent_id, error)
+        raise
+
+
+def create_folder(service, parent_id: str, name: str, drive_id: str) -> Dict[str, Any]:
+    """Create a folder under the specified parent."""
+    body = {
+        "name": name,
+        "mimeType": "application/vnd.google-apps.folder",
+        "parents": [parent_id],
+        "driveId": drive_id,
+    }
+    try:
+        return service.files().create(
+            body=body,
+            supportsAllDrives=True,
+            fields='id, name'
+        ).execute()
+    except HttpError as error:
+        logger.error("Failed to create folder %s under %s: %s", name, parent_id, error)
+        raise
+
+
+def ensure_public_permission(service, file_id: str) -> Dict[str, Any]:
+    """Ensure a file or folder has an 'anyone with the link' reader permission."""
+    permissions = get_file_permissions(service, file_id)
+    for permission in permissions:
+        if permission.get('type') == 'anyone':
+            return permission
+
+    logger.info("Setting public access for %s", file_id)
+    try:
+        return service.permissions().create(
+            fileId=file_id,
+            supportsAllDrives=True,
+            sendNotificationEmail=False,
+            body={
+                "type": "anyone",
+                "role": "reader",
+                "allowFileDiscovery": False,
+            },
+        ).execute()
+    except HttpError as error:
+        logger.error("Failed to set public permission for %s: %s", file_id, error)
+        raise
+
+
+def ensure_public_subdir(service, parent_id: str, subdir_name: str, drive_id: str) -> Dict[str, Any]:
+    """Ensure the configured public subdirectory exists and is shared publicly."""
+    existing_folder = find_child_folder(service, parent_id, subdir_name, drive_id)
+    if existing_folder:
+        logger.info("Public subdir '%s' already exists under %s", subdir_name, parent_id)
+        folder = existing_folder
+    else:
+        logger.info("Creating public subdir '%s' under %s", subdir_name, parent_id)
+        folder = create_folder(service, parent_id, subdir_name, drive_id)
+
+    ensure_public_permission(service, folder['id'])
+    return folder

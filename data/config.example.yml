@@ -11,7 +11,7 @@ scan:
   include_trashed: false
   include_shortcuts: true
   max_depth: null
-  public_folder_name: "public"
+  public_subdir: "public"
 
 output:
   dir: "./data"
