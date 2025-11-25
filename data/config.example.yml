@@ -18,6 +18,8 @@ commands:
     file_match:
       - ".*?KP.*?\\.xlsx"
       - "^Public Report\\.csv$"
+  move_files_csv:
+    csv_file: "data/move_files.csv"
 
 output:
   dir: "./data"
@@ -40,5 +42,6 @@ planfix:
 http:
   port: 7587
   token: skldjfh
+
 
 

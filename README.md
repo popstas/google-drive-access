@@ -66,6 +66,8 @@ commands:
     file_match:
       - ".*?KP.*?\\.xlsx"
       - "^Public Report\\.csv$"
+  move_files_csv:
+    csv_file: "data/move_files.csv"
 
 output:
   dir: "./data"
@@ -106,6 +108,21 @@ Run the command:
 
 ```bash
 python -m src.drive_audit.commands --config data/config.yml move_files_to_public_folder --dry-run
+```
+
+### move_files_csv
+
+Move an explicit set of files listed in a comma-separated manifest (see `data/move_files.csv`). Each manifest row must include `file_name`, `file_id`, and `dest_folder` (target folder ID inside Google Drive). An optional `source_folder` column can help operators review the origin.
+
+- Reads the manifest path from `commands.move_files_csv.csv_file` (overridable via `--csv-file`).
+- Uses the provided `dest_folder` directly; public subfolders are not discovered automatically.
+- Writes command logs to `data/move_files_csv.log`.
+- Supports `--dry-run` to preview all moves without changing Google Drive.
+
+Run the command:
+
+```bash
+python -m src.drive_audit.commands --config data/config.yml move_files_csv --dry-run
 ```
 
 ## HTTP server endpoints

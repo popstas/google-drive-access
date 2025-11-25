@@ -1,5 +1,5 @@
 import pytest
-from src.drive_audit.commands import move_files_to_public_folder
+from src.drive_audit.commands import move_files_from_csv, move_files_to_public_folder
 from src.drive_audit.model import DriveConfig
 
 
@@ -180,3 +180,54 @@ def test_move_files_to_public_folder_requires_patterns(monkeypatch):
 
     with pytest.raises(ValueError, match="file_matches"):
         move_files_to_public_folder(None, drive_config, [], dry_run=False)
+
+
+def test_move_files_from_csv_moves_listed_files(tmp_path, monkeypatch):
+    csv_file = tmp_path / "move_files.csv"
+    csv_file.write_text(
+        "file_name,file_id,dest_folder,source_folder\n"
+        "KP Client,file-1,destination-folder,client-folder\n",
+        encoding="utf-8",
+    )
+
+    drive_config = build_drive_config()
+
+    class FakeRequest:
+        def __init__(self, response):
+            self.response = response
+
+        def execute(self):
+            return self.response
+
+    class FakeFilesResource:
+        def get(self, fileId, fields, supportsAllDrives):
+            assert fields == "id,name,parents"
+            assert supportsAllDrives is True
+            return FakeRequest({"id": fileId, "name": "KP Client", "parents": ["old-parent"]})
+
+    class FakeService:
+        def __init__(self):
+            self._files = FakeFilesResource()
+
+        def files(self):
+            return self._files
+
+    moved = []
+
+    def fake_move_file(service, file_id, new_parent, parents):
+        moved.append((file_id, new_parent, parents))
+        return {"file_id": file_id, "new_parent": new_parent, "parents": parents}
+
+    monkeypatch.setattr("src.drive_audit.commands.move_file", fake_move_file)
+
+    results = move_files_from_csv(FakeService(), drive_config, csv_file, dry_run=False)
+
+    assert results == [
+        {
+            "file_id": "file-1",
+            "new_parent": "destination-folder",
+            "parents": ["old-parent"],
+            "destination_parent": "destination-folder",
+        }
+    ]
+    assert moved == [("file-1", "destination-folder", ["old-parent"])]
