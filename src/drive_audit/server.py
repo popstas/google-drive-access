@@ -9,7 +9,13 @@ from urllib.parse import parse_qs, urlparse
 
 import yaml
 
-from .google_client import add_user_permission, ensure_public_subdir, get_service
+from .google_client import (
+    add_user_permission,
+    create_folder,
+    ensure_public_subdir,
+    find_child_folder,
+    get_service,
+)
 from .model import DriveConfig, HttpConfig, PlanfixConfig, PlanfixEndpointConfig
 from .planfix_client import PlanfixClient
 
@@ -33,6 +39,10 @@ def build_planfix_config(config_data: Dict[str, Any]) -> PlanfixConfig:
         get_manager=PlanfixEndpointConfig(
             url=planfix_section["getManager"]["url"],
             token=planfix_section["getManager"]["token"],
+        ),
+        get_client_task=PlanfixEndpointConfig(
+            url=planfix_section["getClientTask"]["url"],
+            token=planfix_section["getClientTask"]["token"],
         ),
         role=planfix_section["role"],
     )
@@ -124,6 +134,16 @@ def parse_assignee_ids(assignee_id: Any) -> List[str]:
     return [assignee_id_str]
 
 
+def normalize_assignee_ids(assignee_ids: List[str]) -> List[str]:
+    normalized_ids: List[str] = []
+    for assignee_id in assignee_ids:
+        assignee_str = str(assignee_id)
+        if assignee_str.startswith("user:"):
+            assignee_str = assignee_str.split(":", 1)[1]
+        normalized_ids.append(assignee_str)
+    return normalized_ids
+
+
 def collect_google_accounts(planfix_client: PlanfixClient, assignee_ids: List[str]) -> List[str]:
     google_accounts: List[str] = []
     seen_accounts = set()
@@ -184,20 +204,17 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             except json.JSONDecodeError as exc:
                 raise ValueError(f"Invalid JSON: {exc.msg}") from exc
 
-        def do_POST(self) -> None:  # noqa: N802
-            if self.path != "/set_client_folder_access":
-                self._send_json(200, {"answer": "Not found"})
-                return
+        def _grant_access(self, task_id: int, initial_assignee_ids: List[str], folder_id: str) -> List[str]:
+            if drive_config.public_subdir:
+                ensure_public_subdir(service, folder_id, drive_config.public_subdir, drive_config.drive_id)
 
-            if not self._authenticate():
-                return
+            tasks = planfix_client.get_child_tasks(task_id)
+            assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
+            google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
+            set_permissions(service, folder_id, google_accounts, role)
+            return google_accounts
 
-            try:
-                payload = self._parse_body()
-            except ValueError as exc:
-                self._send_json(200, {"answer": str(exc)})
-                return
-
+        def _handle_set_client_folder_access(self, payload: Dict[str, Any]) -> None:
             required_fields = ["contact_id", "folder_url", "task_id", "assignee_id"]
             missing_fields = [field for field in required_fields if field not in payload]
             if missing_fields:
@@ -206,16 +223,10 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
 
             try:
                 task_id = int(payload["task_id"])
-                initial_assignee_ids = parse_assignee_ids(payload["assignee_id"])
+                initial_assignee_ids = normalize_assignee_ids(parse_assignee_ids(payload["assignee_id"]))
                 folder_id = extract_folder_id(str(payload["folder_url"]))
 
-                if drive_config.public_subdir:
-                    ensure_public_subdir(service, folder_id, drive_config.public_subdir, drive_config.drive_id)
-
-                tasks = planfix_client.get_child_tasks(task_id)
-                assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
-                google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
-                permission_results = set_permissions(service, folder_id, google_accounts, role)
+                google_accounts = self._grant_access(task_id, initial_assignee_ids, folder_id)
             except ValueError as exc:
                 self._send_json(200, {"answer": str(exc)})
                 return
@@ -230,6 +241,80 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     "answer": f"Access granted for {', '.join(google_accounts)}"
                 }
             )
+
+        def _handle_create_client_folder(self, payload: Dict[str, Any]) -> None:
+            required_fields = ["contact_id", "folder_name"]
+            missing_fields = [field for field in required_fields if field not in payload]
+            if missing_fields:
+                self._send_json(200, {"answer": f"Missing fields: {', '.join(missing_fields)}"})
+                return
+
+            try:
+                contact_id = int(payload["contact_id"])
+                folder_name = str(payload["folder_name"]).strip()
+                if not folder_name:
+                    raise ValueError("folder_name must not be empty")
+
+                client_task = planfix_client.get_client_task(contact_id)
+                if not client_task.get("found"):
+                    self._send_json(200, {"answer": "Client task not found"})
+                    return
+
+                task_id = int(client_task.get("taskId"))
+                assignees = client_task.get("assignees", {}).get("users", [])
+                initial_assignee_ids = normalize_assignee_ids(assignees)
+
+                existing_folder = find_child_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
+                if existing_folder:
+                    self._send_json(200, {"answer": "Folder already exists"})
+                    return
+
+                folder = create_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
+                google_accounts = self._grant_access(task_id, initial_assignee_ids, folder["id"])
+            except ValueError as exc:
+                self._send_json(200, {"answer": str(exc)})
+                return
+            except Exception as exc:  # pylint: disable=broad-except
+                logger.exception("Failed to process request: %s", exc)
+                self._send_json(200, {"answer": "Internal server error"})
+                return
+
+            self._send_json(
+                200,
+                {
+                    "answer": f"Folder {folder_name} created and access granted for {', '.join(google_accounts)}",
+                    "folderId": folder["id"],
+                }
+            )
+
+        def do_POST(self) -> None:  # noqa: N802
+            if self.path == "/set_client_folder_access":
+                if not self._authenticate():
+                    return
+
+                try:
+                    payload = self._parse_body()
+                except ValueError as exc:
+                    self._send_json(200, {"answer": str(exc)})
+                    return
+
+                self._handle_set_client_folder_access(payload)
+                return
+
+            if self.path == "/create_client_folder":
+                if not self._authenticate():
+                    return
+
+                try:
+                    payload = self._parse_body()
+                except ValueError as exc:
+                    self._send_json(200, {"answer": str(exc)})
+                    return
+
+                self._handle_create_client_folder(payload)
+                return
+
+            self._send_json(200, {"answer": "Not found"})
             
 
     return AccessHandler

@@ -50,6 +50,20 @@ class PlanfixClient:
         logger.debug("Manager lookup result for %s: %s", assignee_id, manager)
         return manager
 
+    def get_client_task(self, client_id: int) -> Dict[str, Any]:
+        payload = {"clientId": client_id}
+        logger.debug("Fetching client task for client_id=%s", client_id)
+        response = requests.post(
+            self._config.get_client_task.url,
+            headers=self._headers(self._config.get_client_task.token),
+            json=payload,
+            timeout=15,
+        )
+        response.raise_for_status()
+        client_task = response.json()
+        logger.debug("Client task lookup result for %s: %s", client_id, client_task)
+        return client_task
+
     @staticmethod
     def collect_assignee_ids(tasks: List[Dict[str, Any]], initial_assignee_ids: List[str]) -> Set[str]:
         assignee_ids: Set[str] = set()

@@ -26,6 +26,9 @@ planfix:
   getManager:
     url: https://api.example.com/manager
     token: skldjfh
+  getClientTask:
+    url: https://api.example.com/client-task
+    token: skldjfh
   role: "writer"
 
 http:
