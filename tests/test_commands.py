@@ -1,7 +1,14 @@
+import re
+
 import pytest
 
 from drive_audit.commands import move_files_from_csv, move_files_to_public_folder
 from drive_audit.model import DriveConfig
+from drive_audit.public_folder_ops import (
+    collect_public_folder_matches,
+    execute_public_folder_moves,
+    validate_public_folder_move_inputs,
+)
 
 
 def build_drive_config() -> DriveConfig:
@@ -23,6 +30,125 @@ def build_drive_config() -> DriveConfig:
     )
 
 
+def test_validate_public_folder_move_inputs_normalizes_values():
+    drive_config = build_drive_config()
+
+    patterns, mime_types = validate_public_folder_move_inputs(
+        drive_config, "KP", ["text/csv", ""]
+    )
+
+    assert len(patterns) == 1
+    assert patterns[0].pattern == "KP"
+    assert mime_types == {"text/csv"}
+
+
+def test_collect_public_folder_matches_filters_and_collects(monkeypatch):
+    drive_config = build_drive_config()
+
+    public_calls = []
+
+    def fake_ensure_public_subdir(service, parent_id, subdir_name, drive_id):
+        public_calls.append(parent_id)
+        return {"id": f"public-{parent_id}", "name": subdir_name}
+
+    monkeypatch.setattr(
+        "drive_audit.public_folder_ops.ensure_public_subdir", fake_ensure_public_subdir
+    )
+
+    root_children = [
+        {
+            "id": "client",
+            "name": "Client",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["root"],
+        }
+    ]
+
+    client_files = [
+        {
+            "id": "1",
+            "name": "KP_report.xlsx",
+            "mimeType": "application/vnd.ms-excel",
+            "parents": ["client"],
+        },
+        {
+            "id": "2",
+            "name": "notes.txt",
+            "mimeType": "text/plain",
+            "parents": ["client"],
+        },
+        {
+            "id": "3",
+            "name": "KP_report.xlsx",
+            "mimeType": "application/vnd.ms-excel",
+            "parents": ["public-client"],
+        },
+    ]
+
+    def fake_list_folder_children(
+        service, folder_id, drive_id, cache_timeout_seconds=None
+    ):
+        if folder_id == "root":
+            return root_children
+        if folder_id == "client":
+            return client_files
+        return []
+
+    monkeypatch.setattr(
+        "drive_audit.public_folder_ops.list_folder_children", fake_list_folder_children
+    )
+
+    patterns = [re.compile("KP", re.IGNORECASE)]
+    matches = collect_public_folder_matches(None, drive_config, patterns, [])
+
+    assert len(matches) == 1
+    assert matches[0]["file"]["id"] == "1"
+    assert public_calls == ["client"]
+
+
+def test_execute_public_folder_moves_handles_dry_run_and_execute(monkeypatch):
+    drive_config = build_drive_config()
+
+    move_calls = []
+
+    def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
+        move_calls.append((file_id, new_parent, previous_parents, drive_id))
+        return {
+            "file_id": file_id,
+            "new_parent": new_parent,
+            "previous_parents": previous_parents,
+        }
+
+    monkeypatch.setattr("drive_audit.public_folder_ops.move_file", fake_move_file)
+
+    matches = [
+        {
+            "file": {"id": "123", "name": "KP.pdf", "parents": ["client"]},
+            "public_folder": {"id": "public-client", "name": "public"},
+            "client_name": "Client",
+        }
+    ]
+
+    dry_results = execute_public_folder_moves(None, matches, drive_config, dry_run=True)
+
+    assert dry_results == [
+        {
+            "file_id": "123",
+            "new_parent": "public-client",
+            "destination_path": "Client/public",
+            "dry_run": True,
+        }
+    ]
+    assert move_calls == []
+
+    live_results = execute_public_folder_moves(
+        None, matches, drive_config, dry_run=False
+    )
+
+    assert live_results[0]["destination_path"] == "Client/public"
+    assert move_calls == [("123", "public-client", ["client"], drive_config.drive_id)]
+
+
 def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     drive_config = build_drive_config()
 
@@ -33,7 +159,7 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
         return {"id": f"public-{parent_id}"}
 
     monkeypatch.setattr(
-        "drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
+        "drive_audit.public_folder_ops.ensure_public_subdir", fake_ensure_public_subdir
     )
 
     root_children = [
@@ -83,7 +209,7 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
         return []
 
     monkeypatch.setattr(
-        "drive_audit.commands.list_folder_children", fake_list_folder_children
+        "drive_audit.public_folder_ops.list_folder_children", fake_list_folder_children
     )
 
     moved = []
@@ -96,7 +222,7 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
             "previous_parents": previous_parents,
         }
 
-    monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
+    monkeypatch.setattr("drive_audit.public_folder_ops.move_file", fake_move_file)
 
     results = move_files_to_public_folder(
         None, drive_config, ["KP", "^Public Report\\.csv$"], dry_run=False
@@ -120,7 +246,7 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
         return {"id": f"public-{parent_id}"}
 
     monkeypatch.setattr(
-        "drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
+        "drive_audit.public_folder_ops.ensure_public_subdir", fake_ensure_public_subdir
     )
 
     root_children = [
@@ -151,7 +277,7 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
         return []
 
     monkeypatch.setattr(
-        "drive_audit.commands.list_folder_children", fake_list_folder_children
+        "drive_audit.public_folder_ops.list_folder_children", fake_list_folder_children
     )
 
     moved = []
@@ -164,7 +290,7 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
             "previous_parents": previous_parents,
         }
 
-    monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
+    monkeypatch.setattr("drive_audit.public_folder_ops.move_file", fake_move_file)
 
     results = move_files_to_public_folder(
         None, drive_config, ["kp.*\\.xlsx"], dry_run=False
@@ -182,7 +308,7 @@ def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
         return {"id": f"public-{parent_id}"}
 
     monkeypatch.setattr(
-        "drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
+        "drive_audit.public_folder_ops.ensure_public_subdir", fake_ensure_public_subdir
     )
 
     root_children = [
@@ -219,7 +345,7 @@ def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
         return []
 
     monkeypatch.setattr(
-        "drive_audit.commands.list_folder_children", fake_list_folder_children
+        "drive_audit.public_folder_ops.list_folder_children", fake_list_folder_children
     )
 
     moved = []
@@ -232,7 +358,7 @@ def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
             "previous_parents": previous_parents,
         }
 
-    monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
+    monkeypatch.setattr("drive_audit.public_folder_ops.move_file", fake_move_file)
 
     results = move_files_to_public_folder(
         None,
@@ -258,7 +384,7 @@ def test_move_files_to_client_public_folder(monkeypatch):
         return {"id": f"public-{parent_id}", "name": subdir_name}
 
     monkeypatch.setattr(
-        "drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
+        "drive_audit.public_folder_ops.ensure_public_subdir", fake_ensure_public_subdir
     )
 
     root_children = [
@@ -303,7 +429,7 @@ def test_move_files_to_client_public_folder(monkeypatch):
         return client_files.get(folder_id, [])
 
     monkeypatch.setattr(
-        "drive_audit.commands.list_folder_children", fake_list_folder_children
+        "drive_audit.public_folder_ops.list_folder_children", fake_list_folder_children
     )
 
     moved = []
@@ -316,7 +442,7 @@ def test_move_files_to_client_public_folder(monkeypatch):
             "previous_parents": previous_parents,
         }
 
-    monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
+    monkeypatch.setattr("drive_audit.public_folder_ops.move_file", fake_move_file)
 
     results = move_files_to_public_folder(
         None, drive_config, ["KP", "^Public Report\\.csv$"], dry_run=False
@@ -333,7 +459,7 @@ def test_move_files_to_client_public_folder(monkeypatch):
 def test_move_files_to_public_folder_requires_patterns(monkeypatch):
     drive_config = build_drive_config()
     monkeypatch.setattr(
-        "drive_audit.commands.ensure_public_subdir",
+        "drive_audit.public_folder_ops.ensure_public_subdir",
         lambda *args, **kwargs: {"id": "public"},
     )
 
