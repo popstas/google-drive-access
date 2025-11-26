@@ -1,9 +1,11 @@
 from src.drive_audit.google_client import (
     create_folder,
+    DEFAULT_LIST_CHILDREN_CACHE_DIR,
     list_files,
     list_folder_children,
     move_file,
     reset_list_folder_children_cache,
+    set_list_folder_children_cache_dir,
 )
 
 
@@ -159,3 +161,36 @@ def test_move_file_clears_cached_children():
     )
 
     assert len(service.files_api.list_api.calls) == 4
+
+
+def test_list_folder_children_persists_to_disk(tmp_path):
+    cache_dir = tmp_path / "list_children"
+    set_list_folder_children_cache_dir(cache_dir)
+    reset_list_folder_children_cache()
+
+    responses = [
+        {"files": [{"id": "child", "name": "Child", "mimeType": "text/plain", "parents": ["folder"]}]},
+    ]
+    service = _FakeServiceListOnly(responses)
+
+    first = list(
+        list_folder_children(
+            service, "folder", "drive", page_size=50, cache_timeout_seconds=3600
+        )
+    )
+
+    assert len(service.files_api.calls) == 1
+
+    set_list_folder_children_cache_dir(cache_dir)
+    second_service = _FakeServiceListOnly([])
+    second = list(
+        list_folder_children(
+            second_service, "folder", "drive", page_size=50, cache_timeout_seconds=3600
+        )
+    )
+
+    assert first == second
+    assert len(second_service.files_api.calls) == 0
+
+    set_list_folder_children_cache_dir(DEFAULT_LIST_CHILDREN_CACHE_DIR)
+    reset_list_folder_children_cache()

@@ -1,6 +1,8 @@
-import os
+import json
 import logging
+import os
 import time
+from pathlib import Path
 from typing import Optional, Generator, Any, Dict, List, Tuple
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
@@ -12,6 +14,9 @@ logger = logging.getLogger(__name__)
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
 _list_folder_children_cache: Dict[Tuple[str, str, int], Tuple[float, List[Dict[str, Any]]]] = {}
+DEFAULT_CACHE_ROOT = Path("data/cache")
+DEFAULT_LIST_CHILDREN_CACHE_DIR = DEFAULT_CACHE_ROOT / "list_folder_children"
+_list_children_cache_dir = DEFAULT_LIST_CHILDREN_CACHE_DIR
 DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT = 3600
 
 
@@ -243,6 +248,77 @@ def _get_drive_scope(drive_id: str) -> str:
     return drive_id or ""
 
 
+def set_list_folder_children_cache_dir(cache_dir: Path) -> None:
+    """Update the directory used for persisting list_folder_children cache."""
+
+    global _list_children_cache_dir
+    _list_children_cache_dir = cache_dir
+    _list_children_cache_dir.mkdir(parents=True, exist_ok=True)
+    _list_folder_children_cache.clear()
+
+
+def _get_list_children_cache_dir() -> Path:
+    _list_children_cache_dir.mkdir(parents=True, exist_ok=True)
+    return _list_children_cache_dir
+
+
+def _get_cache_file_path(cache_key: Tuple[str, str, int]) -> Path:
+    drive_scope, folder_id, page_size = cache_key
+    safe_drive_scope = drive_scope or "user"
+    safe_folder_id = folder_id.replace(os.sep, "_")
+    return _get_list_children_cache_dir() / f"{safe_drive_scope}_{safe_folder_id}_{page_size}.json"
+
+
+def _load_disk_cache(cache_key: Tuple[str, str, int], cache_timeout_seconds: int) -> Optional[Tuple[float, List[Dict[str, Any]]]]:
+    cache_file = _get_cache_file_path(cache_key)
+    if not cache_file.exists():
+        return None
+
+    try:
+        with cache_file.open(encoding="utf-8") as cache_handle:
+            payload = json.load(cache_handle)
+    except (OSError, json.JSONDecodeError):
+        cache_file.unlink(missing_ok=True)
+        return None
+
+    cached_at = payload.get("cached_at")
+    cached_files = payload.get("files")
+    if not isinstance(cached_at, (int, float)) or not isinstance(cached_files, list):
+        cache_file.unlink(missing_ok=True)
+        return None
+
+    if cache_timeout_seconds <= 0 or time.time() - cached_at >= cache_timeout_seconds:
+        cache_file.unlink(missing_ok=True)
+        return None
+
+    return cached_at, cached_files
+
+
+def _write_disk_cache(cache_key: Tuple[str, str, int], cached_value: Tuple[float, List[Dict[str, Any]]]) -> None:
+    cache_file = _get_cache_file_path(cache_key)
+    cache_file.parent.mkdir(parents=True, exist_ok=True)
+    cached_at, cached_files = cached_value
+    try:
+        with cache_file.open("w", encoding="utf-8") as cache_handle:
+            json.dump({"cached_at": cached_at, "files": cached_files}, cache_handle)
+    except OSError:
+        logger.warning("Failed to persist cache file %s", cache_file)
+
+
+def _remove_disk_cache(cache_key: Tuple[str, str, int]) -> None:
+    cache_file = _get_cache_file_path(cache_key)
+    cache_file.unlink(missing_ok=True)
+
+
+def _clear_cache_dir() -> None:
+    cache_dir = _get_list_children_cache_dir()
+    if not cache_dir.exists():
+        return
+
+    for cache_file in cache_dir.glob("*.json"):
+        cache_file.unlink(missing_ok=True)
+
+
 def reset_list_folder_children_cache(
     folder_id: Optional[str] = None, drive_id: str = "", page_size: Optional[int] = None
 ) -> None:
@@ -250,6 +326,7 @@ def reset_list_folder_children_cache(
 
     if folder_id is None:
         _list_folder_children_cache.clear()
+        _clear_cache_dir()
         return
 
     drive_scope = _get_drive_scope(drive_id)
@@ -261,6 +338,7 @@ def reset_list_folder_children_cache(
 
     for key in keys_to_delete:
         _list_folder_children_cache.pop(key, None)
+        _remove_disk_cache(key)
 
 
 def _get_cached_children(
@@ -269,16 +347,26 @@ def _get_cached_children(
     cache_key = (_get_drive_scope(drive_id), folder_id, page_size)
     cached_value = _list_folder_children_cache.get(cache_key)
     if not cached_value:
+        cached_value = _load_disk_cache(cache_key, cache_timeout_seconds)
+        if cached_value:
+            _list_folder_children_cache[cache_key] = cached_value
+
+    if cache_timeout_seconds <= 0:
+        if cached_value:
+            _list_folder_children_cache.pop(cache_key, None)
+            _remove_disk_cache(cache_key)
+        return None
+
+    if not cached_value:
         return None
 
     cached_at, cached_files = cached_value
-    if cache_timeout_seconds <= 0:
-        return None
 
     if time.time() - cached_at < cache_timeout_seconds:
         return list(cached_files)
 
     _list_folder_children_cache.pop(cache_key, None)
+    _remove_disk_cache(cache_key)
     return None
 
 
@@ -326,7 +414,9 @@ def list_folder_children(
 
     if cache_timeout_seconds > 0:
         cache_key = (_get_drive_scope(drive_id), folder_id, page_size)
-        _list_folder_children_cache[cache_key] = (time.time(), list(fetched_files))
+        cached_value = (time.time(), list(fetched_files))
+        _list_folder_children_cache[cache_key] = cached_value
+        _write_disk_cache(cache_key, cached_value)
 
 
 def move_file(
