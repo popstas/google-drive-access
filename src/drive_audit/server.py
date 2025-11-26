@@ -4,7 +4,7 @@ import json
 import logging
 import re
 from http.server import BaseHTTPRequestHandler, HTTPServer
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Union
 from urllib.parse import parse_qs, urlparse
 
 import yaml
@@ -134,10 +134,17 @@ def parse_assignee_ids(assignee_id: Any) -> List[str]:
     return [assignee_id_str]
 
 
-def normalize_assignee_ids(assignee_ids: List[str]) -> List[str]:
+def normalize_assignee_ids(assignee_ids: List[Union[str, Dict[str, Any]]]) -> List[str]:
     normalized_ids: List[str] = []
     for assignee_id in assignee_ids:
-        assignee_str = str(assignee_id)
+        if isinstance(assignee_id, dict):
+            assignee_str = str(assignee_id.get("id", "")).strip()
+        else:
+            assignee_str = str(assignee_id).strip()
+
+        if not assignee_str:
+            continue
+
         if assignee_str.startswith("user:"):
             assignee_str = assignee_str.split(":", 1)[1]
         normalized_ids.append(assignee_str)
@@ -266,7 +273,8 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
 
                 existing_folder = find_child_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
                 if existing_folder:
-                    self._send_json(200, {"answer": "Folder already exists"})
+                    folder_url = f"https://drive.google.com/drive/folders/{existing_folder['id']}"
+                    self._send_json(200, {"answer": f"Client folder already exists: {folder_url}"})
                     return
 
                 folder = create_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
@@ -279,11 +287,13 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 self._send_json(200, {"answer": "Internal server error"})
                 return
 
+            folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
             self._send_json(
                 200,
                 {
-                    "answer": f"Folder {folder_name} created and access granted for {', '.join(google_accounts)}",
-                    "folderId": folder["id"],
+                    "answer": f"Folder {folder_name} created and access granted for {', '.join(google_accounts)}, folder_url: {folder_url}",
+                    "folder_id": folder["id"],
+                    "folder_url": folder_url,
                 }
             )
 
