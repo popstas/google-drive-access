@@ -109,7 +109,9 @@ def build_http_config(config_data: Dict[str, Any]) -> HttpConfig:
     if lang not in TRANSLATIONS:
         lang = "en"
 
-    return HttpConfig(port=int(http_section["port"]), token=str(http_section["token"]), lang=lang)
+    return HttpConfig(
+        port=int(http_section["port"]), token=str(http_section["token"]), lang=lang
+    )
 
 
 def extract_folder_id(folder_url: str) -> str:
@@ -142,7 +144,9 @@ def parse_assignee_ids(assignee_id: Any) -> List[str]:
     assignee_id_str = str(assignee_id).strip()
 
     # Try to parse as Python literal (handles "['7', '1']")
-    if assignee_id_str.startswith("[") or (assignee_id_str.startswith("'") and "[" in assignee_id_str):
+    if assignee_id_str.startswith("[") or (
+        assignee_id_str.startswith("'") and "[" in assignee_id_str
+    ):
         try:
             # First try Python literal eval (handles "['7', '1']")
             parsed = ast.literal_eval(assignee_id_str)
@@ -180,7 +184,9 @@ def normalize_assignee_ids(assignee_ids: List[Union[str, Dict[str, Any]]]) -> Li
     return normalized_ids
 
 
-def collect_google_accounts(planfix_client: PlanfixClient, assignee_ids: List[str]) -> List[str]:
+def collect_google_accounts(
+    planfix_client: PlanfixClient, assignee_ids: List[str]
+) -> List[str]:
     google_accounts: List[str] = []
     seen_accounts = set()
     for assignee_id in assignee_ids:
@@ -189,19 +195,27 @@ def collect_google_accounts(planfix_client: PlanfixClient, assignee_ids: List[st
         if google_account and google_account not in seen_accounts:
             seen_accounts.add(google_account)
             google_accounts.append(google_account)
-            logger.debug("Collected google account %s for assignee %s", google_account, assignee_id)
+            logger.debug(
+                "Collected google account %s for assignee %s",
+                google_account,
+                assignee_id,
+            )
     return google_accounts
 
 
-def set_permissions(service, folder_id: str, google_accounts: List[str], role: str) -> List[Dict[str, Any]]:
+def set_permissions(
+    service, folder_id: str, google_accounts: List[str], role: str
+) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
     for account in google_accounts:
         permission = add_user_permission(service, folder_id, account, role)
-        results.append({
-            "email": account,
-            "permission_id": permission.get("id"),
-            "role": role,
-        })
+        results.append(
+            {
+                "email": account,
+                "permission_id": permission.get("id"),
+                "role": role,
+            }
+        )
     return results
 
 
@@ -214,7 +228,13 @@ def collect_existing_user_accounts(service, folder_id: str) -> List[str]:
     ]
 
 
-def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConfig, drive_config: DriveConfig, role: str):
+def create_handler(
+    planfix_client: PlanfixClient,
+    service,
+    http_config: HttpConfig,
+    drive_config: DriveConfig,
+    role: str,
+):
     language = http_config.lang
 
     class AccessHandler(BaseHTTPRequestHandler):
@@ -222,7 +242,9 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             logger.info("%s - %s", self.address_string(), format % args)
 
         def _log_request(self, payload: Dict[str, Any]) -> None:
-            logger.info("%s request: %s", self.path, json.dumps(payload, ensure_ascii=False))
+            logger.info(
+                "%s request: %s", self.path, json.dumps(payload, ensure_ascii=False)
+            )
 
         def _translate(self, key: str, **context: Any) -> str:
             return translate(language, key, **context)
@@ -231,7 +253,9 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             return ", ".join(accounts) if accounts else self._translate("none")
 
         def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
-            logger.info("%s answer: %s", self.path, json.dumps(payload, ensure_ascii=False))
+            logger.info(
+                "%s answer: %s", self.path, json.dumps(payload, ensure_ascii=False)
+            )
             response = json.dumps(payload).encode("utf-8")
             self.send_response(status_code)
             self.send_header("Content-Type", "application/json")
@@ -242,7 +266,9 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
         def _authenticate(self) -> bool:
             auth_header = self.headers.get("Authorization", "")
             if not auth_header.startswith("Bearer "):
-                self._send_json(200, {"answer": self._translate("missing_or_invalid_auth_header")})
+                self._send_json(
+                    200, {"answer": self._translate("missing_or_invalid_auth_header")}
+                )
                 return False
 
             token = auth_header.split(" ", 1)[1]
@@ -261,17 +287,32 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             except json.JSONDecodeError as exc:
                 raise LocalizedError("invalid_json", detail=exc.msg) from exc
 
-        def _grant_access(self, task_id: int, initial_assignee_ids: List[str], folder_id: str) -> Dict[str, List[str]]:
+        def _grant_access(
+            self, task_id: int, initial_assignee_ids: List[str], folder_id: str
+        ) -> Dict[str, List[str]]:
             if drive_config.public_subdir:
-                ensure_public_subdir(service, folder_id, drive_config.public_subdir, drive_config.drive_id)
+                ensure_public_subdir(
+                    service,
+                    folder_id,
+                    drive_config.public_subdir,
+                    drive_config.drive_id,
+                )
 
             tasks = planfix_client.get_child_tasks(task_id)
-            assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
-            google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
+            assignee_ids = PlanfixClient.collect_assignee_ids(
+                tasks, initial_assignee_ids
+            )
+            google_accounts = collect_google_accounts(
+                planfix_client, sorted(assignee_ids)
+            )
             existing_accounts = collect_existing_user_accounts(service, folder_id)
             existing_accounts_set = set(existing_accounts)
 
-            new_accounts = [account for account in google_accounts if account not in existing_accounts_set]
+            new_accounts = [
+                account
+                for account in google_accounts
+                if account not in existing_accounts_set
+            ]
 
             if new_accounts:
                 set_permissions(service, folder_id, new_accounts, role)
@@ -279,13 +320,17 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             return {
                 "granted_accounts": new_accounts,
                 "existing_accounts": [
-                    account for account in google_accounts if account in existing_accounts_set
+                    account
+                    for account in google_accounts
+                    if account in existing_accounts_set
                 ],
             }
 
         def _handle_set_client_folder_access(self, payload: Dict[str, Any]) -> None:
             required_fields = ["contact_id", "folder_url"]
-            missing_fields = [field for field in required_fields if field not in payload]
+            missing_fields = [
+                field for field in required_fields if field not in payload
+            ]
             if missing_fields:
                 self._send_json(
                     200,
@@ -312,7 +357,9 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 elif not has_task_id and not has_assignee_id:
                     client_task = planfix_client.get_client_task(contact_id)
                     if not client_task.get("found"):
-                        self._send_json(200, {"answer": self._translate("client_task_not_found")})
+                        self._send_json(
+                            200, {"answer": self._translate("client_task_not_found")}
+                        )
                         return
 
                     task_id = int(client_task.get("taskId"))
@@ -321,31 +368,31 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 else:
                     self._send_json(
                         200,
-                        {
-                            "answer": self._translate(
-                                "task_and_assignee_together"
-                            )
-                        },
+                        {"answer": self._translate("task_and_assignee_together")},
                     )
                     return
 
-                access_report = self._grant_access(task_id, initial_assignee_ids, folder_id)
+                access_report = self._grant_access(
+                    task_id, initial_assignee_ids, folder_id
+                )
             except LocalizedError as exc:
-                self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
+                self._send_json(
+                    200, {"answer": self._translate(exc.key, **exc.context)}
+                )
                 return
             except Exception as exc:  # pylint: disable=broad-except
                 logger.exception("Failed to process request: %s", exc)
-                self._send_json(200, {"answer": self._translate("internal_server_error")})
+                self._send_json(
+                    200, {"answer": self._translate("internal_server_error")}
+                )
                 return
 
             granted_accounts = access_report["granted_accounts"]
             existing_accounts = access_report["existing_accounts"]
-            answer = (
-                self._translate(
-                    "granted_existing",
-                    granted=self._format_accounts(granted_accounts),
-                    existing=self._format_accounts(existing_accounts),
-                )
+            answer = self._translate(
+                "granted_existing",
+                granted=self._format_accounts(granted_accounts),
+                existing=self._format_accounts(existing_accounts),
             )
             self._send_json(
                 200,
@@ -353,12 +400,14 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     "answer": answer,
                     "granted_accounts": granted_accounts,
                     "existing_accounts": existing_accounts,
-                }
+                },
             )
 
         def _handle_create_client_folder(self, payload: Dict[str, Any]) -> None:
             required_fields = ["contact_id", "folder_name"]
-            missing_fields = [field for field in required_fields if field not in payload]
+            missing_fields = [
+                field for field in required_fields if field not in payload
+            ]
             if missing_fields:
                 self._send_json(
                     200,
@@ -378,14 +427,21 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
 
                 client_task = planfix_client.get_client_task(contact_id)
                 if not client_task.get("found"):
-                    self._send_json(200, {"answer": self._translate("client_task_not_found")})
+                    self._send_json(
+                        200, {"answer": self._translate("client_task_not_found")}
+                    )
                     return
 
                 task_id = int(client_task.get("taskId"))
                 assignees = client_task.get("assignees", {}).get("users", [])
                 initial_assignee_ids = normalize_assignee_ids(assignees)
 
-                existing_folder = find_child_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
+                existing_folder = find_child_folder(
+                    service,
+                    drive_config.root_folder_id,
+                    folder_name,
+                    drive_config.drive_id,
+                )
                 if existing_folder:
                     folder_url = f"https://drive.google.com/drive/folders/{existing_folder['id']}"
                     self._send_json(
@@ -398,24 +454,33 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     )
                     return
 
-                folder = create_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
-                access_report = self._grant_access(task_id, initial_assignee_ids, folder["id"])
+                folder = create_folder(
+                    service,
+                    drive_config.root_folder_id,
+                    folder_name,
+                    drive_config.drive_id,
+                )
+                access_report = self._grant_access(
+                    task_id, initial_assignee_ids, folder["id"]
+                )
             except LocalizedError as exc:
-                self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
+                self._send_json(
+                    200, {"answer": self._translate(exc.key, **exc.context)}
+                )
                 return
             except Exception as exc:  # pylint: disable=broad-except
                 logger.exception("Failed to process request: %s", exc)
-                self._send_json(200, {"answer": self._translate("internal_server_error")})
+                self._send_json(
+                    200, {"answer": self._translate("internal_server_error")}
+                )
                 return
 
             granted_accounts = access_report["granted_accounts"]
             existing_accounts = access_report["existing_accounts"]
-            answer = (
-                self._translate(
-                    "granted_existing",
-                    granted=self._format_accounts(granted_accounts),
-                    existing=self._format_accounts(existing_accounts),
-                )
+            answer = self._translate(
+                "granted_existing",
+                granted=self._format_accounts(granted_accounts),
+                existing=self._format_accounts(existing_accounts),
             )
             folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
             self._send_json(
@@ -431,7 +496,7 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     "folder_url": folder_url,
                     "granted_accounts": granted_accounts,
                     "existing_accounts": existing_accounts,
-                }
+                },
             )
 
         def do_POST(self) -> None:  # noqa: N802
@@ -442,7 +507,9 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 try:
                     payload = self._parse_body()
                 except LocalizedError as exc:
-                    self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
+                    self._send_json(
+                        200, {"answer": self._translate(exc.key, **exc.context)}
+                    )
                     return
 
                 self._log_request(payload)
@@ -456,7 +523,9 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 try:
                     payload = self._parse_body()
                 except LocalizedError as exc:
-                    self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
+                    self._send_json(
+                        200, {"answer": self._translate(exc.key, **exc.context)}
+                    )
                     return
 
                 self._log_request(payload)
@@ -464,19 +533,24 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 return
 
             self._send_json(200, {"answer": self._translate("not_found")})
-            
 
     return AccessHandler
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="HTTP server for managing Google Drive access")
-    parser.add_argument("--config", default="data/config.yml", help="Path to configuration file")
+    parser = argparse.ArgumentParser(
+        description="HTTP server for managing Google Drive access"
+    )
+    parser.add_argument(
+        "--config", default="data/config.yml", help="Path to configuration file"
+    )
     args = parser.parse_args()
 
     config_data = load_config(args.config)
     log_level_name = str(config_data.get("logLevel", "INFO")).upper()
-    logging.basicConfig(level=log_level_name, format="%(asctime)s - %(levelname)s - %(message)s")
+    logging.basicConfig(
+        level=log_level_name, format="%(asctime)s - %(levelname)s - %(message)s"
+    )
 
     planfix_config = build_planfix_config(config_data)
     http_config = build_http_config(config_data)
@@ -486,7 +560,9 @@ def main() -> None:
     service = get_service(drive_config)
     planfix_client = PlanfixClient(planfix_config)
 
-    handler = create_handler(planfix_client, service, http_config, drive_config, planfix_config.role)
+    handler = create_handler(
+        planfix_client, service, http_config, drive_config, planfix_config.role
+    )
     server = HTTPServer(("", http_config.port), handler)
     logger.info("Starting HTTP server on port %s", http_config.port)
     try:

@@ -65,7 +65,9 @@ class PlanfixClient:
         return client_task
 
     @staticmethod
-    def collect_assignee_ids(tasks: List[Dict[str, Any]], initial_assignee_ids: List[str]) -> Set[str]:
+    def collect_assignee_ids(
+        tasks: List[Dict[str, Any]], initial_assignee_ids: List[str]
+    ) -> Set[str]:
         assignee_ids: Set[str] = set()
         for task in tasks:
             users = task.get("assignees", {}).get("users", [])
