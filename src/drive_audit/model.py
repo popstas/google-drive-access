@@ -21,6 +21,7 @@ class PlanfixConfig:
 class HttpConfig:
     port: int
     token: str
+    lang: str
 
 
 @dataclass

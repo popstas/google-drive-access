@@ -23,6 +23,57 @@ from .planfix_client import PlanfixClient
 logger = logging.getLogger(__name__)
 
 
+class LocalizedError(Exception):
+    def __init__(self, key: str, **context: Any) -> None:
+        super().__init__(key)
+        self.key = key
+        self.context = context
+
+
+TRANSLATIONS: Dict[str, Dict[str, str]] = {
+    "en": {
+        "missing_or_invalid_auth_header": "Missing or invalid Authorization header",
+        "invalid_token": "Invalid token",
+        "request_body_required": "Request body is required",
+        "invalid_json": "Invalid JSON: {detail}",
+        "missing_fields": "Missing fields: {fields}",
+        "client_task_not_found": "Client task not found",
+        "task_and_assignee_together": "task_id and assignee_id must both be provided or omitted",
+        "internal_server_error": "Internal server error",
+        "granted_existing": "Granted: {granted}; Existing: {existing}",
+        "folder_name_empty": "folder_name must not be empty",
+        "client_folder_exists": "Client folder already exists: {folder_url}",
+        "folder_created": "Folder {folder_name} created. {details}, folder_url: {folder_url}",
+        "not_found": "Not found",
+        "unable_extract_folder_id": "Unable to extract folder_id from folder_url",
+        "none": "none",
+    },
+    "ru": {
+        "missing_or_invalid_auth_header": "Отсутствует или некорректный заголовок Authorization",
+        "invalid_token": "Неверный токен",
+        "request_body_required": "Требуется тело запроса",
+        "invalid_json": "Некорректный JSON: {detail}",
+        "missing_fields": "Отсутствуют поля: {fields}",
+        "client_task_not_found": "Задача клиента не найдена",
+        "task_and_assignee_together": "Поля task_id и assignee_id должны быть указаны вместе или оба отсутствовать",
+        "internal_server_error": "Внутренняя ошибка сервера",
+        "granted_existing": "Предоставлено: {granted}; Уже было: {existing}",
+        "folder_name_empty": "folder_name не должно быть пустым",
+        "client_folder_exists": "Папка клиента уже существует: {folder_url}",
+        "folder_created": "Папка {folder_name} создана. {details}, folder_url: {folder_url}",
+        "not_found": "Не найдено",
+        "unable_extract_folder_id": "Не удалось извлечь folder_id из folder_url",
+        "none": "нет",
+    },
+}
+
+
+def translate(lang: str, key: str, **context: Any) -> str:
+    translations = TRANSLATIONS.get(lang, TRANSLATIONS["en"])
+    template = translations.get(key, TRANSLATIONS["en"].get(key, key))
+    return template.format(**context)
+
+
 def load_config(config_path: str) -> Dict[str, Any]:
     with open(config_path, "r", encoding="utf-8") as config_file:
         return yaml.safe_load(config_file)
@@ -53,7 +104,12 @@ def build_http_config(config_data: Dict[str, Any]) -> HttpConfig:
     http_section = config_data.get("http")
     if not http_section:
         raise ValueError("http configuration section is missing")
-    return HttpConfig(port=int(http_section["port"]), token=str(http_section["token"]))
+
+    lang = str(config_data.get("lang", "en")).lower()
+    if lang not in TRANSLATIONS:
+        lang = "en"
+
+    return HttpConfig(port=int(http_section["port"]), token=str(http_section["token"]), lang=lang)
 
 
 def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
@@ -94,7 +150,7 @@ def extract_folder_id(folder_url: str) -> str:
     if match:
         return match.group(1)
 
-    raise ValueError("Unable to extract folder_id from folder_url")
+    raise LocalizedError("unable_extract_folder_id")
 
 
 def parse_assignee_ids(assignee_id: Any) -> List[str]:
@@ -187,12 +243,20 @@ def collect_existing_user_accounts(service, folder_id: str) -> List[str]:
 
 
 def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConfig, drive_config: DriveConfig, role: str):
+    language = http_config.lang
+
     class AccessHandler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             logger.info("%s - %s", self.address_string(), format % args)
 
         def _log_request(self, payload: Dict[str, Any]) -> None:
             logger.info("%s request: %s", self.path, json.dumps(payload, ensure_ascii=False))
+
+        def _translate(self, key: str, **context: Any) -> str:
+            return translate(language, key, **context)
+
+        def _format_accounts(self, accounts: List[str]) -> str:
+            return ", ".join(accounts) if accounts else self._translate("none")
 
         def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
             logger.info("%s answer: %s", self.path, json.dumps(payload, ensure_ascii=False))
@@ -206,24 +270,24 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
         def _authenticate(self) -> bool:
             auth_header = self.headers.get("Authorization", "")
             if not auth_header.startswith("Bearer "):
-                self._send_json(200, {"answer": "Missing or invalid Authorization header"})
+                self._send_json(200, {"answer": self._translate("missing_or_invalid_auth_header")})
                 return False
 
             token = auth_header.split(" ", 1)[1]
             if token != http_config.token:
-                self._send_json(200, {"answer": "Invalid token"})
+                self._send_json(200, {"answer": self._translate("invalid_token")})
                 return False
             return True
 
         def _parse_body(self) -> Dict[str, Any]:
             content_length = int(self.headers.get("Content-Length", "0"))
             if content_length == 0:
-                raise ValueError("Request body is required")
+                raise LocalizedError("request_body_required")
             body = self.rfile.read(content_length)
             try:
                 return json.loads(body)
             except json.JSONDecodeError as exc:
-                raise ValueError(f"Invalid JSON: {exc.msg}") from exc
+                raise LocalizedError("invalid_json", detail=exc.msg) from exc
 
         def _grant_access(self, task_id: int, initial_assignee_ids: List[str], folder_id: str) -> Dict[str, List[str]]:
             if drive_config.public_subdir:
@@ -251,7 +315,14 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             required_fields = ["contact_id", "folder_url"]
             missing_fields = [field for field in required_fields if field not in payload]
             if missing_fields:
-                self._send_json(200, {"answer": f"Missing fields: {', '.join(missing_fields)}"})
+                self._send_json(
+                    200,
+                    {
+                        "answer": self._translate(
+                            "missing_fields", fields=", ".join(missing_fields)
+                        )
+                    },
+                )
                 return
 
             try:
@@ -269,7 +340,7 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 elif not has_task_id and not has_assignee_id:
                     client_task = planfix_client.get_client_task(contact_id)
                     if not client_task.get("found"):
-                        self._send_json(200, {"answer": "Client task not found"})
+                        self._send_json(200, {"answer": self._translate("client_task_not_found")})
                         return
 
                     task_id = int(client_task.get("taskId"))
@@ -278,24 +349,31 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 else:
                     self._send_json(
                         200,
-                        {"answer": "task_id and assignee_id must both be provided or omitted"},
+                        {
+                            "answer": self._translate(
+                                "task_and_assignee_together"
+                            )
+                        },
                     )
                     return
 
                 access_report = self._grant_access(task_id, initial_assignee_ids, folder_id)
-            except ValueError as exc:
-                self._send_json(200, {"answer": str(exc)})
+            except LocalizedError as exc:
+                self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
                 return
             except Exception as exc:  # pylint: disable=broad-except
                 logger.exception("Failed to process request: %s", exc)
-                self._send_json(200, {"answer": "Internal server error"})
+                self._send_json(200, {"answer": self._translate("internal_server_error")})
                 return
 
             granted_accounts = access_report["granted_accounts"]
             existing_accounts = access_report["existing_accounts"]
             answer = (
-                f"Granted: {', '.join(granted_accounts) if granted_accounts else 'none'}; "
-                f"Existing: {', '.join(existing_accounts) if existing_accounts else 'none'}"
+                self._translate(
+                    "granted_existing",
+                    granted=self._format_accounts(granted_accounts),
+                    existing=self._format_accounts(existing_accounts),
+                )
             )
             self._send_json(
                 200,
@@ -310,18 +388,25 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             required_fields = ["contact_id", "folder_name"]
             missing_fields = [field for field in required_fields if field not in payload]
             if missing_fields:
-                self._send_json(200, {"answer": f"Missing fields: {', '.join(missing_fields)}"})
+                self._send_json(
+                    200,
+                    {
+                        "answer": self._translate(
+                            "missing_fields", fields=", ".join(missing_fields)
+                        )
+                    },
+                )
                 return
 
             try:
                 contact_id = int(payload["contact_id"])
                 folder_name = str(payload["folder_name"]).strip()
                 if not folder_name:
-                    raise ValueError("folder_name must not be empty")
+                    raise LocalizedError("folder_name_empty")
 
                 client_task = planfix_client.get_client_task(contact_id)
                 if not client_task.get("found"):
-                    self._send_json(200, {"answer": "Client task not found"})
+                    self._send_json(200, {"answer": self._translate("client_task_not_found")})
                     return
 
                 task_id = int(client_task.get("taskId"))
@@ -331,30 +416,45 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 existing_folder = find_child_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
                 if existing_folder:
                     folder_url = f"https://drive.google.com/drive/folders/{existing_folder['id']}"
-                    self._send_json(200, {"answer": f"Client folder already exists: {folder_url}"})
+                    self._send_json(
+                        200,
+                        {
+                            "answer": self._translate(
+                                "client_folder_exists", folder_url=folder_url
+                            )
+                        },
+                    )
                     return
 
                 folder = create_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
                 access_report = self._grant_access(task_id, initial_assignee_ids, folder["id"])
-            except ValueError as exc:
-                self._send_json(200, {"answer": str(exc)})
+            except LocalizedError as exc:
+                self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
                 return
             except Exception as exc:  # pylint: disable=broad-except
                 logger.exception("Failed to process request: %s", exc)
-                self._send_json(200, {"answer": "Internal server error"})
+                self._send_json(200, {"answer": self._translate("internal_server_error")})
                 return
 
             granted_accounts = access_report["granted_accounts"]
             existing_accounts = access_report["existing_accounts"]
             answer = (
-                f"Granted: {', '.join(granted_accounts) if granted_accounts else 'none'}; "
-                f"Existing: {', '.join(existing_accounts) if existing_accounts else 'none'}"
+                self._translate(
+                    "granted_existing",
+                    granted=self._format_accounts(granted_accounts),
+                    existing=self._format_accounts(existing_accounts),
+                )
             )
             folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
             self._send_json(
                 200,
                 {
-                    "answer": f"Folder {folder_name} created. {answer}, folder_url: {folder_url}",
+                    "answer": self._translate(
+                        "folder_created",
+                        folder_name=folder_name,
+                        details=answer,
+                        folder_url=folder_url,
+                    ),
                     "folder_id": folder["id"],
                     "folder_url": folder_url,
                     "granted_accounts": granted_accounts,
@@ -369,8 +469,8 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
 
                 try:
                     payload = self._parse_body()
-                except ValueError as exc:
-                    self._send_json(200, {"answer": str(exc)})
+                except LocalizedError as exc:
+                    self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
                     return
 
                 self._log_request(payload)
@@ -383,15 +483,15 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
 
                 try:
                     payload = self._parse_body()
-                except ValueError as exc:
-                    self._send_json(200, {"answer": str(exc)})
+                except LocalizedError as exc:
+                    self._send_json(200, {"answer": self._translate(exc.key, **exc.context)})
                     return
 
                 self._log_request(payload)
                 self._handle_create_client_folder(payload)
                 return
 
-            self._send_json(200, {"answer": "Not found"})
+            self._send_json(200, {"answer": self._translate("not_found")})
             
 
     return AccessHandler
