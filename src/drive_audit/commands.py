@@ -24,14 +24,17 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
     scan_section = config_data.get("scan", {})
     output_section = config_data.get("output", {})
 
-    root_folder_id = drive_section.get("root_folder_id", drive_section["id"])
+    drive_id = drive_section["id"]
+    root_folder_id = drive_section.get("root_folder_id") or drive_id
     if root_folder_id == "ROOT_FOLDER_ID":
-        root_folder_id = drive_section["id"]
+        root_folder_id = drive_id or "root"
+    elif not root_folder_id:
+        root_folder_id = "root"
 
     return DriveConfig(
         credentials_file=google_section["credentials_file"],
         delegated_user=google_section.get("delegated_user"),
-        drive_id=drive_section["id"],
+        drive_id=drive_id,
         root_folder_id=root_folder_id,
         root_folder_name=drive_section["root_folder_name"],
         include_trashed=scan_section.get("include_trashed", False),
