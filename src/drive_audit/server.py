@@ -181,7 +181,11 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
             logger.info("%s - %s", self.address_string(), format % args)
 
+        def _log_request(self, payload: Dict[str, Any]) -> None:
+            logger.info("%s request: %s", self.path, json.dumps(payload, ensure_ascii=False))
+
         def _send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
+            logger.info("%s answer: %s", self.path, json.dumps(payload, ensure_ascii=False))
             response = json.dumps(payload).encode("utf-8")
             self.send_response(status_code)
             self.send_header("Content-Type", "application/json")
@@ -308,6 +312,7 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     self._send_json(200, {"answer": str(exc)})
                     return
 
+                self._log_request(payload)
                 self._handle_set_client_folder_access(payload)
                 return
 
@@ -321,6 +326,7 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     self._send_json(200, {"answer": str(exc)})
                     return
 
+                self._log_request(payload)
                 self._handle_create_client_folder(payload)
                 return
 
