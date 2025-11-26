@@ -14,6 +14,7 @@ from .google_client import (
     create_folder,
     ensure_public_subdir,
     find_child_folder,
+    get_file_permissions,
     get_service,
 )
 from .model import DriveConfig, HttpConfig, PlanfixConfig, PlanfixEndpointConfig
@@ -176,6 +177,15 @@ def set_permissions(service, folder_id: str, google_accounts: List[str], role: s
     return results
 
 
+def collect_existing_user_accounts(service, folder_id: str) -> List[str]:
+    permissions = get_file_permissions(service, folder_id)
+    return [
+        permission["emailAddress"]
+        for permission in permissions
+        if permission.get("type") == "user" and permission.get("emailAddress")
+    ]
+
+
 def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConfig, drive_config: DriveConfig, role: str):
     class AccessHandler(BaseHTTPRequestHandler):
         def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
@@ -215,15 +225,27 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             except json.JSONDecodeError as exc:
                 raise ValueError(f"Invalid JSON: {exc.msg}") from exc
 
-        def _grant_access(self, task_id: int, initial_assignee_ids: List[str], folder_id: str) -> List[str]:
+        def _grant_access(self, task_id: int, initial_assignee_ids: List[str], folder_id: str) -> Dict[str, List[str]]:
             if drive_config.public_subdir:
                 ensure_public_subdir(service, folder_id, drive_config.public_subdir, drive_config.drive_id)
 
             tasks = planfix_client.get_child_tasks(task_id)
             assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
             google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
-            set_permissions(service, folder_id, google_accounts, role)
-            return google_accounts
+            existing_accounts = collect_existing_user_accounts(service, folder_id)
+            existing_accounts_set = set(existing_accounts)
+
+            new_accounts = [account for account in google_accounts if account not in existing_accounts_set]
+
+            if new_accounts:
+                set_permissions(service, folder_id, new_accounts, role)
+
+            return {
+                "granted_accounts": new_accounts,
+                "existing_accounts": [
+                    account for account in google_accounts if account in existing_accounts_set
+                ],
+            }
 
         def _handle_set_client_folder_access(self, payload: Dict[str, Any]) -> None:
             required_fields = ["contact_id", "folder_url"]
@@ -260,7 +282,7 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     )
                     return
 
-                google_accounts = self._grant_access(task_id, initial_assignee_ids, folder_id)
+                access_report = self._grant_access(task_id, initial_assignee_ids, folder_id)
             except ValueError as exc:
                 self._send_json(200, {"answer": str(exc)})
                 return
@@ -269,10 +291,18 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 self._send_json(200, {"answer": "Internal server error"})
                 return
 
+            granted_accounts = access_report["granted_accounts"]
+            existing_accounts = access_report["existing_accounts"]
+            answer = (
+                f"Granted: {', '.join(granted_accounts) if granted_accounts else 'none'}; "
+                f"Existing: {', '.join(existing_accounts) if existing_accounts else 'none'}"
+            )
             self._send_json(
                 200,
                 {
-                    "answer": f"Access granted for {', '.join(google_accounts)}"
+                    "answer": answer,
+                    "granted_accounts": granted_accounts,
+                    "existing_accounts": existing_accounts,
                 }
             )
 
@@ -305,7 +335,7 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                     return
 
                 folder = create_folder(service, drive_config.root_folder_id, folder_name, drive_config.drive_id)
-                google_accounts = self._grant_access(task_id, initial_assignee_ids, folder["id"])
+                access_report = self._grant_access(task_id, initial_assignee_ids, folder["id"])
             except ValueError as exc:
                 self._send_json(200, {"answer": str(exc)})
                 return
@@ -314,13 +344,21 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
                 self._send_json(200, {"answer": "Internal server error"})
                 return
 
+            granted_accounts = access_report["granted_accounts"]
+            existing_accounts = access_report["existing_accounts"]
+            answer = (
+                f"Granted: {', '.join(granted_accounts) if granted_accounts else 'none'}; "
+                f"Existing: {', '.join(existing_accounts) if existing_accounts else 'none'}"
+            )
             folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
             self._send_json(
                 200,
                 {
-                    "answer": f"Folder {folder_name} created and access granted for {', '.join(google_accounts)}, folder_url: {folder_url}",
+                    "answer": f"Folder {folder_name} created. {answer}, folder_url: {folder_url}",
                     "folder_id": folder["id"],
                     "folder_url": folder_url,
+                    "granted_accounts": granted_accounts,
+                    "existing_accounts": existing_accounts,
                 }
             )
 
