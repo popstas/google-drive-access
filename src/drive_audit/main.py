@@ -71,36 +71,8 @@ def main():
 
     if args.root_folder_id:
         drive_section['root_folder_id'] = args.root_folder_id
-    root_folder_id = drive_section.get('root_folder_id')
 
-    # Handle placeholder or missing root_folder_id
-    if root_folder_id == 'ROOT_FOLDER_ID':
-        fallback_root = drive_section.get('id') or 'root'
-        logger.info(f"root_folder_id is placeholder, defaulting to drive scope: {fallback_root}")
-        drive_section['root_folder_id'] = fallback_root
-    elif not root_folder_id:
-        drive_section['root_folder_id'] = drive_section.get('id') or 'root'
-
-    # Create DriveConfig object
-    config = DriveConfig(
-        credentials_file=config_data['google']['credentials_file'],
-        delegated_user=config_data['google'].get('delegated_user'),
-        drive_id=drive_section.get('id', ''),
-        root_folder_id=drive_section['root_folder_id'],
-        root_folder_name=drive_section['root_folder_name'],
-        include_trashed=config_data['scan']['include_trashed'],
-        include_shortcuts=config_data['scan']['include_shortcuts'],
-        max_depth=config_data['scan'].get('max_depth'),
-        limit=config_data['scan'].get('limit'),
-        public_subdir=config_data['scan'].get('public_subdir'),
-        output_dir=config_data['output']['dir'],
-        yaml_file=config_data['output']['yaml_file'],
-        files_csv=config_data['output']['files_csv'],
-        permissions_csv=config_data['output']['permissions_csv'],
-        list_folder_children_cache_timeout=int(
-            config_data.get('cache_timeouts', {}).get('list_folder_children', 3600)
-        ),
-    )
+    config = DriveConfig.from_dict(config_data)
     
     logger.info("Initializing Google Drive Service...")
     try:
