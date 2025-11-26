@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime
-from src.drive_audit.model import FileInfo, DriveConfig, AccessInfo, Permission, PolicyInfo
-from src.drive_audit.policy import check_policy
+from drive_audit.model import FileInfo, DriveConfig, AccessInfo, Permission, PolicyInfo
+from drive_audit.policy import check_policy
 
 class TestPolicy(unittest.TestCase):
     def setUp(self):

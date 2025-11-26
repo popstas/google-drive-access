@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Dict, List
 
-from src.drive_audit.google_client import (
+from drive_audit.google_client import (
     ensure_public_subdir,
     list_folder_children,
     reset_list_folder_children_cache,
@@ -131,9 +131,11 @@ def test_ensure_public_subdir_reuses_existing(monkeypatch):
         ensured.append(file_id)
         return {"id": file_id}
 
-    monkeypatch.setattr("src.drive_audit.google_client.find_child_folder", fake_find_child_folder)
-    monkeypatch.setattr("src.drive_audit.google_client.create_folder", fake_create_folder)
-    monkeypatch.setattr("src.drive_audit.google_client.ensure_public_permission", fake_ensure_public_permission)
+    monkeypatch.setattr("drive_audit.google_client.find_child_folder", fake_find_child_folder)
+    monkeypatch.setattr("drive_audit.google_client.create_folder", fake_create_folder)
+    monkeypatch.setattr(
+        "drive_audit.google_client.ensure_public_permission", fake_ensure_public_permission
+    )
 
     folder = ensure_public_subdir(None, parent_id="parent", subdir_name="public", drive_id="drive")
 
