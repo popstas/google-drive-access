@@ -214,7 +214,16 @@ def ensure_public_permission(service, file_id: str) -> Dict[str, Any]:
 
 def ensure_public_subdir(service, parent_id: str, subdir_name: str, drive_id: str) -> Dict[str, Any]:
     """Ensure the configured public subdirectory exists and is shared publicly."""
-    existing_folder = find_child_folder(service, parent_id, subdir_name, drive_id)
+    try:
+        existing_folder = find_child_folder(service, parent_id, subdir_name, drive_id)
+    except HttpError as error:
+        logger.warning(
+            "Failed to look up public subdir '%s' under %s: %s",
+            subdir_name,
+            parent_id,
+            error,
+        )
+        existing_folder = None
     if existing_folder:
         logger.info("Public subdir '%s' already exists under %s", subdir_name, parent_id)
         folder = existing_folder
