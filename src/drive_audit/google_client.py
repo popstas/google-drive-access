@@ -409,8 +409,12 @@ def list_folder_children(
             if not page_token:
                 break
         except HttpError as error:
-            logger.error("An error occurred while listing children for %s: %s", folder_id, error)
-            raise
+            logger.error(
+                "An error occurred while listing children for %s: %s. Returning partial results.",
+                folder_id,
+                error,
+            )
+            break
 
     if cache_timeout_seconds > 0:
         cache_key = (_get_drive_scope(drive_id), folder_id, page_size)

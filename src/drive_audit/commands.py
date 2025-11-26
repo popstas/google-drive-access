@@ -4,7 +4,7 @@ import logging
 import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from .google_client import (
     ensure_public_subdir,
@@ -54,7 +54,11 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
 
 
 def move_files_to_public_folder(
-    service, drive_config: DriveConfig, file_matches: Any, dry_run: bool
+    service,
+    drive_config: DriveConfig,
+    file_matches: Any,
+    dry_run: bool,
+    mime_type_matches: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     if not drive_config.public_subdir:
         raise ValueError("public_subdir must be configured to move files to a public folder")
@@ -67,6 +71,19 @@ def move_files_to_public_folder(
         raise ValueError("file_matches entries must be strings")
 
     patterns = [re.compile(pattern, re.IGNORECASE) for pattern in file_matches]
+
+    mime_types: List[str] = []
+    if mime_type_matches is not None:
+        if isinstance(mime_type_matches, str):
+            mime_types = [mime_type_matches]
+        elif isinstance(mime_type_matches, list) and all(
+            isinstance(mime, str) for mime in mime_type_matches
+        ):
+            mime_types = mime_type_matches
+        else:
+            raise ValueError("mime_type_matches must be a string or list of strings")
+
+    allowed_mime_types = {mime.lower() for mime in mime_types if mime}
 
     folder_mime = "application/vnd.google-apps.folder"
     matched_files: List[Dict[str, Any]] = []
@@ -93,7 +110,7 @@ def move_files_to_public_folder(
             cache_timeout_seconds=drive_config.list_folder_children_cache_timeout,
         ):
             name = file_data.get("name", "")
-            mime_type = file_data.get("mimeType", "")
+            mime_type = (file_data.get("mimeType") or "")
             parents = file_data.get("parents", [])
 
             if mime_type == folder_mime:
@@ -103,6 +120,9 @@ def move_files_to_public_folder(
                 continue
 
             if not any(pattern.search(name) for pattern in patterns):
+                continue
+
+            if allowed_mime_types and mime_type.lower() not in allowed_mime_types:
                 continue
 
             public_folder = public_folders.get(client_folder_id)
@@ -348,6 +368,9 @@ def main() -> None:
     if args.command == "move_files_to_public_folder":
         command_config = config_data.get("commands", {}).get("move_files_to_public_folder", {})
         configured_patterns = command_config.get("file_match")
+        configured_mime_types = command_config.get("mime_type_match")
+        if configured_mime_types is None:
+            configured_mime_types = command_config.get("mimeType_match")
 
         if not configured_patterns:
             raise ValueError("commands.move_files_to_public_folder.file_match must be configured")
@@ -361,7 +384,22 @@ def main() -> None:
         else:
             raise ValueError("commands.move_files_to_public_folder.file_match must be a string or list of strings")
 
-        moved_files = move_files_to_public_folder(service, drive_config, file_matches, args.dry_run)
+        if configured_mime_types is None:
+            mime_type_matches = None
+        elif isinstance(configured_mime_types, str):
+            mime_type_matches = [configured_mime_types]
+        elif isinstance(configured_mime_types, list) and all(
+            isinstance(mime, str) for mime in configured_mime_types
+        ):
+            mime_type_matches = configured_mime_types
+        else:
+            raise ValueError(
+                "commands.move_files_to_public_folder.mime_type_match must be a string or list of strings"
+            )
+
+        moved_files = move_files_to_public_folder(
+            service, drive_config, file_matches, args.dry_run, mime_type_matches
+        )
         logger.info("%s files processed", len(moved_files))
     elif args.command == "move_files_csv":
         command_config = config_data.get("commands", {}).get("move_files_csv", {})

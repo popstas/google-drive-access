@@ -21,8 +21,11 @@ cache_timeouts:
 commands:
   move_files_to_public_folder:
     file_match:
-      - ".*?KP.*?\\.xlsx"
+      - ".*?KP.*?"
       - "^Public Report\\.csv$"
+    mimeType_match:
+      - "application/vnd.google-apps.spreadsheet"
+      - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   move_files_csv:
     csv_file: "data/move_files.csv"
 

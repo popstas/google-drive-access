@@ -118,6 +118,64 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
     assert public_calls == ["client"]
 
 
+def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
+    drive_config = build_drive_config()
+
+    def fake_ensure_public_subdir(service, parent_id, subdir_name, drive_id):
+        return {"id": f"public-{parent_id}"}
+
+    monkeypatch.setattr(
+        "src.drive_audit.commands.ensure_public_subdir", fake_ensure_public_subdir
+    )
+
+    root_children = [
+        {"id": "client", "name": "Client", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+    ]
+
+    client_files = [
+        {
+            "id": "sheet",
+            "name": "Plan.xlsx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "parents": ["client"],
+        },
+        {
+            "id": "doc",
+            "name": "Plan.xlsx",
+            "mimeType": "application/vnd.google-apps.document",
+            "parents": ["client"],
+        },
+    ]
+
+    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
+        if folder_id == "root":
+            return root_children
+        if folder_id == "client":
+            return client_files
+        return []
+
+    monkeypatch.setattr("src.drive_audit.commands.list_folder_children", fake_list_folder_children)
+
+    moved = []
+
+    def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
+        moved.append((file_id, new_parent, previous_parents))
+        return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
+
+    monkeypatch.setattr("src.drive_audit.commands.move_file", fake_move_file)
+
+    results = move_files_to_public_folder(
+        None,
+        drive_config,
+        ["Plan\\.xlsx"],
+        dry_run=False,
+        mime_type_matches=["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+    )
+
+    assert len(results) == 1
+    assert moved == [("sheet", "public-client", ["client"])]
+
+
 def test_move_files_to_client_public_folder(monkeypatch):
     drive_config = build_drive_config()
 
