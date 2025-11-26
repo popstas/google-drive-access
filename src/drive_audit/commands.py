@@ -17,6 +17,7 @@ from .model import DriveConfig
 
 logger = logging.getLogger(__name__)
 
+
 def move_files_to_public_folder(
     service,
     drive_config: DriveConfig,
@@ -25,7 +26,9 @@ def move_files_to_public_folder(
     mime_type_matches: Optional[Any] = None,
 ) -> List[Dict[str, Any]]:
     if not drive_config.public_subdir:
-        raise ValueError("public_subdir must be configured to move files to a public folder")
+        raise ValueError(
+            "public_subdir must be configured to move files to a public folder"
+        )
 
     if isinstance(file_matches, str):
         file_matches = [file_matches]
@@ -62,7 +65,9 @@ def move_files_to_public_folder(
         client_folder_id = client_folder.get("id")
         if client_folder.get("mimeType") != folder_mime or not client_folder_id:
             logger.debug(
-                "Skipping non-folder item %s (%s) at root level", client_name, client_folder_id
+                "Skipping non-folder item %s (%s) at root level",
+                client_name,
+                client_folder_id,
             )
             continue
 
@@ -74,12 +79,15 @@ def move_files_to_public_folder(
             cache_timeout_seconds=drive_config.list_folder_children_cache_timeout,
         ):
             name = file_data.get("name", "")
-            mime_type = (file_data.get("mimeType") or "")
+            mime_type = file_data.get("mimeType") or ""
             parents = file_data.get("parents", [])
 
             if mime_type == folder_mime:
                 logger.debug(
-                    "Skipping subfolder %s (%s) under %s", name, file_data.get("id"), client_name
+                    "Skipping subfolder %s (%s) under %s",
+                    name,
+                    file_data.get("id"),
+                    client_name,
                 )
                 continue
 
@@ -92,12 +100,17 @@ def move_files_to_public_folder(
             public_folder = public_folders.get(client_folder_id)
             if not public_folder:
                 public_folder = ensure_public_subdir(
-                    service, client_folder_id, drive_config.public_subdir, drive_config.drive_id
+                    service,
+                    client_folder_id,
+                    drive_config.public_subdir,
+                    drive_config.drive_id,
                 )
                 public_folders[client_folder_id] = public_folder
 
             if public_folder["id"] in parents:
-                logger.debug("File %s (%s) already in public folder", name, file_data.get("id"))
+                logger.debug(
+                    "File %s (%s) already in public folder", name, file_data.get("id")
+                )
                 continue
 
             matched_files.append(
@@ -119,7 +132,9 @@ def move_files_to_public_folder(
 
         parents = file_data.get("parents", [])
         if not parents:
-            logger.warning("File %s (%s) has no parents; skipping", file_data.get("name"), file_id)
+            logger.warning(
+                "File %s (%s) has no parents; skipping", file_data.get("name"), file_id
+            )
             continue
 
         destination_parent = public_folder["id"]
@@ -174,7 +189,9 @@ def move_files_from_csv(
     with csv_path.open(encoding="utf-8-sig", newline="") as csv_handle:
         reader = csv.DictReader(csv_handle)
         required_headers = {"file_name", "file_id", "dest_folder"}
-        if not reader.fieldnames or not required_headers.issubset(set(reader.fieldnames)):
+        if not reader.fieldnames or not required_headers.issubset(
+            set(reader.fieldnames)
+        ):
             raise ValueError(
                 f"CSV must contain headers {sorted(required_headers)}, got {reader.fieldnames}"
             )
@@ -225,7 +242,11 @@ def move_files_from_csv(
 
         parents = file_metadata.get("parents", [])
         if not parents:
-            logger.warning("File %s (%s) has no parents; skipping", file_metadata.get("name"), file_id)
+            logger.warning(
+                "File %s (%s) has no parents; skipping",
+                file_metadata.get("name"),
+                file_id,
+            )
             continue
 
         file_name = file_metadata.get("name") or row["name"]
@@ -274,22 +295,31 @@ def move_files_from_csv(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Drive audit commands")
-    parser.add_argument("--config", default="data/config.yml", help="Path to configuration file")
+    parser.add_argument(
+        "--config", default="data/config.yml", help="Path to configuration file"
+    )
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     move_parser = subparsers.add_parser(
-        "move_files_to_public_folder", help="Move files that match the configured pattern to the public folder"
+        "move_files_to_public_folder",
+        help="Move files that match the configured pattern to the public folder",
     )
-    move_parser.add_argument("--dry-run", action="store_true", help="Show actions without moving files")
+    move_parser.add_argument(
+        "--dry-run", action="store_true", help="Show actions without moving files"
+    )
 
     csv_parser = subparsers.add_parser(
         "move_files_csv",
         help="Move explicit file list from a TSV/CSV manifest into each client's public folder",
     )
-    csv_parser.add_argument("--csv-file", help="Path to the TSV/CSV manifest generated manually")
-    csv_parser.add_argument("--dry-run", action="store_true", help="Show actions without moving files")
+    csv_parser.add_argument(
+        "--csv-file", help="Path to the TSV/CSV manifest generated manually"
+    )
+    csv_parser.add_argument(
+        "--dry-run", action="store_true", help="Show actions without moving files"
+    )
 
     return parser.parse_args()
 
@@ -330,14 +360,18 @@ def main() -> None:
     service = get_service(drive_config)
 
     if args.command == "move_files_to_public_folder":
-        command_config = config_data.get("commands", {}).get("move_files_to_public_folder", {})
+        command_config = config_data.get("commands", {}).get(
+            "move_files_to_public_folder", {}
+        )
         configured_patterns = command_config.get("file_match")
         configured_mime_types = command_config.get("mime_type_match")
         if configured_mime_types is None:
             configured_mime_types = command_config.get("mimeType_match")
 
         if not configured_patterns:
-            raise ValueError("commands.move_files_to_public_folder.file_match must be configured")
+            raise ValueError(
+                "commands.move_files_to_public_folder.file_match must be configured"
+            )
 
         if isinstance(configured_patterns, str):
             file_matches = [configured_patterns]
@@ -346,7 +380,9 @@ def main() -> None:
         ):
             file_matches = configured_patterns
         else:
-            raise ValueError("commands.move_files_to_public_folder.file_match must be a string or list of strings")
+            raise ValueError(
+                "commands.move_files_to_public_folder.file_match must be a string or list of strings"
+            )
 
         if configured_mime_types is None:
             mime_type_matches = None
@@ -367,7 +403,9 @@ def main() -> None:
         logger.info("%s files processed", len(moved_files))
     elif args.command == "move_files_csv":
         command_config = config_data.get("commands", {}).get("move_files_csv", {})
-        csv_file = args.csv_file or command_config.get("csv_file") or "data/move_files.csv"
+        csv_file = (
+            args.csv_file or command_config.get("csv_file") or "data/move_files.csv"
+        )
         moved_files = move_files_from_csv(service, drive_config, csv_file, args.dry_run)
         logger.info("%s files processed", len(moved_files))
     else:

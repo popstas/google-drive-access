@@ -3,17 +3,21 @@ import logging
 import os
 import time
 from pathlib import Path
-from typing import Optional, Generator, Any, Dict, List, Tuple
+from typing import Any, Dict, Generator, List, Optional, Tuple
+
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
+
 from .model import DriveConfig
 
 logger = logging.getLogger(__name__)
 
-SCOPES = ['https://www.googleapis.com/auth/drive']
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
-_list_folder_children_cache: Dict[Tuple[str, str, int], Tuple[float, List[Dict[str, Any]]]] = {}
+_list_folder_children_cache: Dict[
+    Tuple[str, str, int], Tuple[float, List[Dict[str, Any]]]
+] = {}
 DEFAULT_CACHE_ROOT = Path("data/cache")
 DEFAULT_LIST_CHILDREN_CACHE_DIR = DEFAULT_CACHE_ROOT / "list_folder_children"
 _list_children_cache_dir = DEFAULT_LIST_CHILDREN_CACHE_DIR
@@ -31,6 +35,7 @@ def _build_drive_scoping_kwargs(drive_id: str) -> Dict[str, Any]:
 
     return {"corpora": "user"}
 
+
 def get_service(config: DriveConfig):
     """Authenticates and returns the Google Drive service."""
     creds = None
@@ -41,9 +46,12 @@ def get_service(config: DriveConfig):
         if config.delegated_user:
             creds = creds.with_subject(config.delegated_user)
     else:
-        raise FileNotFoundError(f"Credentials file not found: {config.credentials_file}")
+        raise FileNotFoundError(
+            f"Credentials file not found: {config.credentials_file}"
+        )
 
-    return build('drive', 'v3', credentials=creds)
+    return build("drive", "v3", credentials=creds)
+
 
 def get_drive_info(service, drive_id: str) -> Dict[str, Any]:
     """Fetches information about the shared drive or user drive."""
@@ -56,32 +64,40 @@ def get_drive_info(service, drive_id: str) -> Dict[str, Any]:
         logger.error(f"An error occurred: {error}")
         raise
 
+
 def get_file_permissions(service, file_id: str) -> List[Dict[str, Any]]:
     """Fetches permissions for a specific file."""
     try:
         permissions = []
         page_token = None
-        
+
         while True:
-            response = service.permissions().list(
-                fileId=file_id,
-                supportsAllDrives=True,
-                fields='nextPageToken, permissions(id, type, role, emailAddress, domain, displayName, allowFileDiscovery, expirationTime, deleted, permissionDetails)',
-                pageToken=page_token
-            ).execute()
-            
-            permissions.extend(response.get('permissions', []))
-            
-            page_token = response.get('nextPageToken', None)
+            response = (
+                service.permissions()
+                .list(
+                    fileId=file_id,
+                    supportsAllDrives=True,
+                    fields="nextPageToken, permissions(id, type, role, emailAddress, domain, displayName, allowFileDiscovery, expirationTime, deleted, permissionDetails)",
+                    pageToken=page_token,
+                )
+                .execute()
+            )
+
+            permissions.extend(response.get("permissions", []))
+
+            page_token = response.get("nextPageToken", None)
             if page_token is None:
                 break
-                
+
         return permissions
     except HttpError as error:
         logger.warning(f"Failed to fetch permissions for file {file_id}: {error}")
         return []
 
-def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[int] = None) -> Generator[Dict[str, Any], None, None]:
+
+def list_files(
+    service, drive_id: str, page_size: int = 1000, limit: Optional[int] = None
+) -> Generator[Dict[str, Any], None, None]:
     """Iterates over all files in the shared or user drive."""
     page_token = None
     query = "trashed = false"
@@ -97,7 +113,7 @@ def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[in
             current_page_size = page_size
             if limit and (limit - count) < page_size:
                 current_page_size = limit - count
-            
+
             request_kwargs = {
                 **_build_drive_scoping_kwargs(drive_id),
                 "q": query,
@@ -108,13 +124,13 @@ def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[in
 
             response = service.files().list(**request_kwargs).execute()
 
-            for file in response.get('files', []):
+            for file in response.get("files", []):
                 yield file
                 count += 1
                 if limit and count >= limit:
                     return
 
-            page_token = response.get('nextPageToken', None)
+            page_token = response.get("nextPageToken", None)
             if page_token is None:
                 break
         except HttpError as error:
@@ -126,7 +142,7 @@ def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[in
 
 def add_user_permission(service, file_id: str, email: str, role: str) -> Dict[str, Any]:
     """Adds a permission for a user to a file or folder.
-    
+
     Note: The 'organizer' role is only valid at the shared drive level.
     For files/folders within a shared drive, 'organizer' is automatically
     converted to 'fileOrganizer'.
@@ -135,25 +151,33 @@ def add_user_permission(service, file_id: str, email: str, role: str) -> Dict[st
     # The 'organizer' role can only be used at the drive level, not on individual items
     if role == "organizer":
         role = "fileOrganizer"
-        logger.debug(f"Converted role 'organizer' to 'fileOrganizer' for file/folder {file_id}")
-    
+        logger.debug(
+            f"Converted role 'organizer' to 'fileOrganizer' for file/folder {file_id}"
+        )
+
     try:
-        return service.permissions().create(
-            fileId=file_id,
-            supportsAllDrives=True,
-            sendNotificationEmail=False,
-            body={
-                "type": "user",
-                "role": role,
-                "emailAddress": email,
-            },
-        ).execute()
+        return (
+            service.permissions()
+            .create(
+                fileId=file_id,
+                supportsAllDrives=True,
+                sendNotificationEmail=False,
+                body={
+                    "type": "user",
+                    "role": role,
+                    "emailAddress": email,
+                },
+            )
+            .execute()
+        )
     except HttpError as error:
         logger.error(f"Failed to add permission for {email} on {file_id}: {error}")
         raise
 
 
-def find_child_folder(service, parent_id: str, name: str, drive_id: str) -> Optional[Dict[str, Any]]:
+def find_child_folder(
+    service, parent_id: str, name: str, drive_id: str
+) -> Optional[Dict[str, Any]]:
     """Find a child folder with the given name under the specified parent."""
     query = (
         f"'{parent_id}' in parents and "
@@ -164,16 +188,18 @@ def find_child_folder(service, parent_id: str, name: str, drive_id: str) -> Opti
         request_kwargs = {
             **_build_drive_scoping_kwargs(drive_id),
             "q": query,
-            "fields": 'files(id, name)',
+            "fields": "files(id, name)",
         }
 
         response = service.files().list(**request_kwargs).execute()
-        files = response.get('files', [])
+        files = response.get("files", [])
         if files:
             return files[0]
         return None
     except HttpError as error:
-        logger.error("Failed to search for folder %s under %s: %s", name, parent_id, error)
+        logger.error(
+            "Failed to search for folder %s under %s: %s", name, parent_id, error
+        )
         raise
 
 
@@ -187,11 +213,11 @@ def create_folder(service, parent_id: str, name: str, drive_id: str) -> Dict[str
     if drive_id:
         body["driveId"] = drive_id
     try:
-        return service.files().create(
-            body=body,
-            supportsAllDrives=bool(drive_id),
-            fields='id, name'
-        ).execute()
+        return (
+            service.files()
+            .create(body=body, supportsAllDrives=bool(drive_id), fields="id, name")
+            .execute()
+        )
     except HttpError as error:
         logger.error("Failed to create folder %s under %s: %s", name, parent_id, error)
         raise
@@ -201,27 +227,33 @@ def ensure_public_permission(service, file_id: str) -> Dict[str, Any]:
     """Ensure a file or folder has an 'anyone with the link' reader permission."""
     permissions = get_file_permissions(service, file_id)
     for permission in permissions:
-        if permission.get('type') == 'anyone':
+        if permission.get("type") == "anyone":
             return permission
 
     logger.info("Setting public access for %s", file_id)
     try:
-        return service.permissions().create(
-            fileId=file_id,
-            supportsAllDrives=True,
-            sendNotificationEmail=False,
-            body={
-                "type": "anyone",
-                "role": "reader",
-                "allowFileDiscovery": False,
-            },
-        ).execute()
+        return (
+            service.permissions()
+            .create(
+                fileId=file_id,
+                supportsAllDrives=True,
+                sendNotificationEmail=False,
+                body={
+                    "type": "anyone",
+                    "role": "reader",
+                    "allowFileDiscovery": False,
+                },
+            )
+            .execute()
+        )
     except HttpError as error:
         logger.error("Failed to set public permission for %s: %s", file_id, error)
         raise
 
 
-def ensure_public_subdir(service, parent_id: str, subdir_name: str, drive_id: str) -> Dict[str, Any]:
+def ensure_public_subdir(
+    service, parent_id: str, subdir_name: str, drive_id: str
+) -> Dict[str, Any]:
     """Ensure the configured public subdirectory exists and is shared publicly."""
     try:
         existing_folder = find_child_folder(service, parent_id, subdir_name, drive_id)
@@ -234,13 +266,15 @@ def ensure_public_subdir(service, parent_id: str, subdir_name: str, drive_id: st
         )
         existing_folder = None
     if existing_folder:
-        logger.info("Public subdir '%s' already exists under %s", subdir_name, parent_id)
+        logger.info(
+            "Public subdir '%s' already exists under %s", subdir_name, parent_id
+        )
         folder = existing_folder
     else:
         logger.info("Creating public subdir '%s' under %s", subdir_name, parent_id)
         folder = create_folder(service, parent_id, subdir_name, drive_id)
 
-    ensure_public_permission(service, folder['id'])
+    ensure_public_permission(service, folder["id"])
     return folder
 
 
@@ -266,10 +300,15 @@ def _get_cache_file_path(cache_key: Tuple[str, str, int]) -> Path:
     drive_scope, folder_id, page_size = cache_key
     safe_drive_scope = drive_scope or "user"
     safe_folder_id = folder_id.replace(os.sep, "_")
-    return _get_list_children_cache_dir() / f"{safe_drive_scope}_{safe_folder_id}_{page_size}.json"
+    return (
+        _get_list_children_cache_dir()
+        / f"{safe_drive_scope}_{safe_folder_id}_{page_size}.json"
+    )
 
 
-def _load_disk_cache(cache_key: Tuple[str, str, int], cache_timeout_seconds: int) -> Optional[Tuple[float, List[Dict[str, Any]]]]:
+def _load_disk_cache(
+    cache_key: Tuple[str, str, int], cache_timeout_seconds: int
+) -> Optional[Tuple[float, List[Dict[str, Any]]]]:
     cache_file = _get_cache_file_path(cache_key)
     if not cache_file.exists():
         return None
@@ -294,7 +333,9 @@ def _load_disk_cache(cache_key: Tuple[str, str, int], cache_timeout_seconds: int
     return cached_at, cached_files
 
 
-def _write_disk_cache(cache_key: Tuple[str, str, int], cached_value: Tuple[float, List[Dict[str, Any]]]) -> None:
+def _write_disk_cache(
+    cache_key: Tuple[str, str, int], cached_value: Tuple[float, List[Dict[str, Any]]]
+) -> None:
     cache_file = _get_cache_file_path(cache_key)
     cache_file.parent.mkdir(parents=True, exist_ok=True)
     cached_at, cached_files = cached_value
@@ -333,7 +374,9 @@ def reset_list_folder_children_cache(
     keys_to_delete = [
         key
         for key in _list_folder_children_cache
-        if key[1] == folder_id and key[0] == drive_scope and (page_size is None or key[2] == page_size)
+        if key[1] == folder_id
+        and key[0] == drive_scope
+        and (page_size is None or key[2] == page_size)
     ]
 
     for key in keys_to_delete:
@@ -378,7 +421,9 @@ def list_folder_children(
     cache_timeout_seconds: int = DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT,
 ) -> Generator[Dict[str, Any], None, None]:
     """Yield direct children of a folder, caching results for the configured duration."""
-    cached_files = _get_cached_children(drive_id, folder_id, page_size, cache_timeout_seconds)
+    cached_files = _get_cached_children(
+        drive_id, folder_id, page_size, cache_timeout_seconds
+    )
     if cached_files is not None:
         for file in cached_files:
             yield file
@@ -401,11 +446,11 @@ def list_folder_children(
 
             response = service.files().list(**request_kwargs).execute()
 
-            for file in response.get('files', []):
+            for file in response.get("files", []):
                 fetched_files.append(file)
                 yield file
 
-            page_token = response.get('nextPageToken')
+            page_token = response.get("nextPageToken")
             if not page_token:
                 break
         except HttpError as error:
@@ -424,18 +469,26 @@ def list_folder_children(
 
 
 def move_file(
-    service, file_id: str, new_parent_id: str, current_parents: List[str], drive_id: str = ""
+    service,
+    file_id: str,
+    new_parent_id: str,
+    current_parents: List[str],
+    drive_id: str = "",
 ) -> Dict[str, Any]:
     """Move a file to a new parent, removing existing parents and invalidating caches."""
-    remove_parents = ','.join(str(parent) for parent in current_parents)
+    remove_parents = ",".join(str(parent) for parent in current_parents)
     try:
-        updated = service.files().update(
-            fileId=file_id,
-            addParents=new_parent_id,
-            removeParents=remove_parents,
-            supportsAllDrives=True,
-            fields='id, parents'
-        ).execute()
+        updated = (
+            service.files()
+            .update(
+                fileId=file_id,
+                addParents=new_parent_id,
+                removeParents=remove_parents,
+                supportsAllDrives=True,
+                fields="id, parents",
+            )
+            .execute()
+        )
     except HttpError as error:
         logger.error("Failed to move file %s to %s: %s", file_id, new_parent_id, error)
         raise

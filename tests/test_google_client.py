@@ -1,6 +1,6 @@
 from drive_audit.google_client import (
-    create_folder,
     DEFAULT_LIST_CHILDREN_CACHE_DIR,
+    create_folder,
     list_files,
     list_folder_children,
     move_file,
@@ -63,7 +63,9 @@ class _FakeFilesListAndUpdate:
 
     def update(self, **kwargs):
         self.update_calls.append(kwargs)
-        return _FakeRequest({"id": kwargs.get("fileId"), "parents": [kwargs.get("addParents")]})
+        return _FakeRequest(
+            {"id": kwargs.get("fileId"), "parents": [kwargs.get("addParents")]}
+        )
 
 
 class _FakeServiceWithUpdate:
@@ -104,7 +106,16 @@ def test_create_folder_omits_drive_scoping_when_missing_drive_id():
 def test_list_folder_children_uses_cache():
     reset_list_folder_children_cache()
     responses = [
-        {"files": [{"id": "child", "name": "Child", "mimeType": "text/plain", "parents": ["folder"]}]},
+        {
+            "files": [
+                {
+                    "id": "child",
+                    "name": "Child",
+                    "mimeType": "text/plain",
+                    "parents": ["folder"],
+                }
+            ]
+        },
         {"files": []},
     ]
     service = _FakeServiceListOnly(responses)
@@ -127,10 +138,37 @@ def test_list_folder_children_uses_cache():
 def test_move_file_clears_cached_children():
     reset_list_folder_children_cache()
     responses = [
-        {"files": [{"id": "child", "name": "Child", "mimeType": "text/plain", "parents": ["source"]}]},
+        {
+            "files": [
+                {
+                    "id": "child",
+                    "name": "Child",
+                    "mimeType": "text/plain",
+                    "parents": ["source"],
+                }
+            ]
+        },
         {"files": []},
-        {"files": [{"id": "child", "name": "Child", "mimeType": "text/plain", "parents": ["source"]}]},
-        {"files": [{"id": "moved", "name": "Moved", "mimeType": "text/plain", "parents": ["destination"]}]},
+        {
+            "files": [
+                {
+                    "id": "child",
+                    "name": "Child",
+                    "mimeType": "text/plain",
+                    "parents": ["source"],
+                }
+            ]
+        },
+        {
+            "files": [
+                {
+                    "id": "moved",
+                    "name": "Moved",
+                    "mimeType": "text/plain",
+                    "parents": ["destination"],
+                }
+            ]
+        },
     ]
     service = _FakeServiceWithUpdate(responses)
 
@@ -169,7 +207,16 @@ def test_list_folder_children_persists_to_disk(tmp_path):
     reset_list_folder_children_cache()
 
     responses = [
-        {"files": [{"id": "child", "name": "Child", "mimeType": "text/plain", "parents": ["folder"]}]},
+        {
+            "files": [
+                {
+                    "id": "child",
+                    "name": "Child",
+                    "mimeType": "text/plain",
+                    "parents": ["folder"],
+                }
+            ]
+        },
     ]
     service = _FakeServiceListOnly(responses)
 

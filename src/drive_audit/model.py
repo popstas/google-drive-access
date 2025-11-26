@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
-from typing import List, Optional, Dict, Any
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 
 @dataclass
@@ -83,12 +83,14 @@ class DriveConfig:
             ),
         )
 
+
 @dataclass
 class PermissionDetails:
     permission_type: str
     role: str
     inherited: bool
     inherited_from: Optional[str]
+
 
 @dataclass
 class Permission:
@@ -103,6 +105,7 @@ class Permission:
     deleted: Optional[bool] = None
     permission_details: List[PermissionDetails] = field(default_factory=list)
 
+
 @dataclass
 class AccessInfo:
     inherited: bool
@@ -116,6 +119,7 @@ class AccessInfo:
     has_link_sharing: bool
     permissions: List[Permission] = field(default_factory=list)
 
+
 @dataclass
 class PolicyInfo:
     is_under_public_folder: bool
@@ -123,6 +127,7 @@ class PolicyInfo:
     is_public_by_domain: bool
     public_outside_public_folder: bool
     notes: List[str] = field(default_factory=list)
+
 
 @dataclass
 class FileInfo:
@@ -139,19 +144,19 @@ class FileInfo:
     size_bytes: Optional[int]
     owners: List[Dict[str, str]]
     last_modifying_user: Optional[Dict[str, str]]
-    
+
     # Enriched fields
     client_id: Optional[str] = None
     client_name: Optional[str] = None
     location: str = ""
     depth: int = 0
-    
+
     # Shortcut specific
     is_shortcut: bool = False
     shortcut_target_id: Optional[str] = None
     shortcut_target_type: Optional[str] = None
     shortcut_target_mime_type: Optional[str] = None
-    
+
     # Access & Policy
     access: Optional[AccessInfo] = None
     policy: Optional[PolicyInfo] = None

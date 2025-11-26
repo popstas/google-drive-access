@@ -25,7 +25,9 @@ class FakeFilesResource:
         self.calls = 0
 
     def list(self, **kwargs):
-        response = self.pages[self.calls] if self.calls < len(self.pages) else {"files": []}
+        response = (
+            self.pages[self.calls] if self.calls < len(self.pages) else {"files": []}
+        )
         self.calls += 1
         return FakeRequest(response)
 
@@ -45,11 +47,25 @@ def test_list_folder_children_caches_results(tmp_path: Path):
     pages = [
         {
             "files": [
-                {"id": "1", "name": "first", "mimeType": "text/plain", "parents": ["folder"]},
+                {
+                    "id": "1",
+                    "name": "first",
+                    "mimeType": "text/plain",
+                    "parents": ["folder"],
+                },
             ],
             "nextPageToken": "next",
         },
-        {"files": [{"id": "2", "name": "second", "mimeType": "text/plain", "parents": ["folder"]}]},
+        {
+            "files": [
+                {
+                    "id": "2",
+                    "name": "second",
+                    "mimeType": "text/plain",
+                    "parents": ["folder"],
+                }
+            ]
+        },
     ]
     service = FakeService(pages)
 
@@ -86,7 +102,16 @@ def test_list_folder_children_skips_cache_when_disabled(tmp_path: Path):
     reset_list_folder_children_cache()
 
     first_pages = [
-        {"files": [{"id": "cached", "name": "cached", "mimeType": "text/plain", "parents": ["folder"]}]}
+        {
+            "files": [
+                {
+                    "id": "cached",
+                    "name": "cached",
+                    "mimeType": "text/plain",
+                    "parents": ["folder"],
+                }
+            ]
+        }
     ]
     first_pass = list(
         list_folder_children(
@@ -98,7 +123,16 @@ def test_list_folder_children_skips_cache_when_disabled(tmp_path: Path):
         )
     )
     second_pages = [
-        {"files": [{"id": "cached", "name": "cached", "mimeType": "text/plain", "parents": ["folder"]}]}
+        {
+            "files": [
+                {
+                    "id": "cached",
+                    "name": "cached",
+                    "mimeType": "text/plain",
+                    "parents": ["folder"],
+                }
+            ]
+        }
     ]
     second_pass = list(
         list_folder_children(
@@ -120,24 +154,37 @@ def test_ensure_public_subdir_reuses_existing(monkeypatch):
     ensured: list[str] = []
 
     def fake_find_child_folder(service, parent_id, name, drive_id):
-        created["last_lookup"] = {"parent_id": parent_id, "name": name, "drive_id": drive_id}
+        created["last_lookup"] = {
+            "parent_id": parent_id,
+            "name": name,
+            "drive_id": drive_id,
+        }
         return {"id": "existing", "name": name}
 
     def fake_create_folder(service, parent_id, name, drive_id):
-        created["created"] = {"parent_id": parent_id, "name": name, "drive_id": drive_id}
+        created["created"] = {
+            "parent_id": parent_id,
+            "name": name,
+            "drive_id": drive_id,
+        }
         return {"id": "new", "name": name}
 
     def fake_ensure_public_permission(service, file_id):
         ensured.append(file_id)
         return {"id": file_id}
 
-    monkeypatch.setattr("drive_audit.google_client.find_child_folder", fake_find_child_folder)
+    monkeypatch.setattr(
+        "drive_audit.google_client.find_child_folder", fake_find_child_folder
+    )
     monkeypatch.setattr("drive_audit.google_client.create_folder", fake_create_folder)
     monkeypatch.setattr(
-        "drive_audit.google_client.ensure_public_permission", fake_ensure_public_permission
+        "drive_audit.google_client.ensure_public_permission",
+        fake_ensure_public_permission,
     )
 
-    folder = ensure_public_subdir(None, parent_id="parent", subdir_name="public", drive_id="drive")
+    folder = ensure_public_subdir(
+        None, parent_id="parent", subdir_name="public", drive_id="drive"
+    )
 
     assert folder["id"] == "existing"
     assert "created" not in created

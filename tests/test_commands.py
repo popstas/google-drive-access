@@ -1,4 +1,5 @@
 import pytest
+
 from drive_audit.commands import move_files_from_csv, move_files_to_public_folder
 from drive_audit.model import DriveConfig
 
@@ -36,18 +37,45 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     )
 
     root_children = [
-        {"id": "client", "name": "Client", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+        {
+            "id": "client",
+            "name": "Client",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["root"],
+        },
         {"id": "loose", "name": "Loose", "mimeType": "text/plain", "parents": ["root"]},
     ]
 
     client_files = [
-        {"id": "1", "name": "KP_report.xlsx", "mimeType": "application/vnd.ms-excel", "parents": ["client"]},
-        {"id": "2", "name": "Public Report.csv", "mimeType": "text/csv", "parents": ["client"]},
-        {"id": "3", "name": "notes.txt", "mimeType": "text/plain", "parents": ["client"]},
-        {"id": "4", "name": "child", "mimeType": "application/vnd.google-apps.folder", "parents": ["client"]},
+        {
+            "id": "1",
+            "name": "KP_report.xlsx",
+            "mimeType": "application/vnd.ms-excel",
+            "parents": ["client"],
+        },
+        {
+            "id": "2",
+            "name": "Public Report.csv",
+            "mimeType": "text/csv",
+            "parents": ["client"],
+        },
+        {
+            "id": "3",
+            "name": "notes.txt",
+            "mimeType": "text/plain",
+            "parents": ["client"],
+        },
+        {
+            "id": "4",
+            "name": "child",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["client"],
+        },
     ]
 
-    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
+    def fake_list_folder_children(
+        service, folder_id, drive_id, cache_timeout_seconds=None
+    ):
         if folder_id == "root":
             return root_children
         if folder_id == "client":
@@ -62,16 +90,23 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
 
     def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
         moved.append((file_id, new_parent, previous_parents))
-        return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
+        return {
+            "file_id": file_id,
+            "new_parent": new_parent,
+            "previous_parents": previous_parents,
+        }
 
     monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
 
     results = move_files_to_public_folder(
-        None, drive_config, ["KP", "^Public Report\\.csv$"] , dry_run=False
+        None, drive_config, ["KP", "^Public Report\\.csv$"], dry_run=False
     )
 
     assert len(results) == 2
-    assert moved == [("1", "public-client", ["client"]), ("2", "public-client", ["client"])]
+    assert moved == [
+        ("1", "public-client", ["client"]),
+        ("2", "public-client", ["client"]),
+    ]
     assert public_calls == ["client"]
 
 
@@ -89,14 +124,26 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
     )
 
     root_children = [
-        {"id": "client", "name": "Client", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+        {
+            "id": "client",
+            "name": "Client",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["root"],
+        },
     ]
 
     client_files = [
-        {"id": "10", "name": "kp_summary.XLSX", "mimeType": "application/vnd.ms-excel", "parents": ["client"]},
+        {
+            "id": "10",
+            "name": "kp_summary.XLSX",
+            "mimeType": "application/vnd.ms-excel",
+            "parents": ["client"],
+        },
     ]
 
-    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
+    def fake_list_folder_children(
+        service, folder_id, drive_id, cache_timeout_seconds=None
+    ):
         if folder_id == "root":
             return root_children
         if folder_id == "client":
@@ -111,11 +158,17 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
 
     def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
         moved.append((file_id, new_parent, previous_parents))
-        return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
+        return {
+            "file_id": file_id,
+            "new_parent": new_parent,
+            "previous_parents": previous_parents,
+        }
 
     monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
 
-    results = move_files_to_public_folder(None, drive_config, ["kp.*\\.xlsx"], dry_run=False)
+    results = move_files_to_public_folder(
+        None, drive_config, ["kp.*\\.xlsx"], dry_run=False
+    )
 
     assert len(results) == 1
     assert moved == [("10", "public-client", ["client"])]
@@ -133,7 +186,12 @@ def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
     )
 
     root_children = [
-        {"id": "client", "name": "Client", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+        {
+            "id": "client",
+            "name": "Client",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["root"],
+        },
     ]
 
     client_files = [
@@ -151,7 +209,9 @@ def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
         },
     ]
 
-    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
+    def fake_list_folder_children(
+        service, folder_id, drive_id, cache_timeout_seconds=None
+    ):
         if folder_id == "root":
             return root_children
         if folder_id == "client":
@@ -166,7 +226,11 @@ def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
 
     def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
         moved.append((file_id, new_parent, previous_parents))
-        return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
+        return {
+            "file_id": file_id,
+            "new_parent": new_parent,
+            "previous_parents": previous_parents,
+        }
 
     monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
 
@@ -175,7 +239,9 @@ def test_move_files_to_public_folder_requires_both_name_and_mime(monkeypatch):
         drive_config,
         ["Plan\\.xlsx"],
         dry_run=False,
-        mime_type_matches=["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"],
+        mime_type_matches=[
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        ],
     )
 
     assert len(results) == 1
@@ -196,20 +262,42 @@ def test_move_files_to_client_public_folder(monkeypatch):
     )
 
     root_children = [
-        {"id": "client-a", "name": "Client A", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
-        {"id": "client-b", "name": "Client B", "mimeType": "application/vnd.google-apps.folder", "parents": ["root"]},
+        {
+            "id": "client-a",
+            "name": "Client A",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["root"],
+        },
+        {
+            "id": "client-b",
+            "name": "Client B",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["root"],
+        },
     ]
 
     client_files = {
         "client-a": [
-            {"id": "a1", "name": "KP_report.xlsx", "mimeType": "application/vnd.ms-excel", "parents": ["client-a"]},
+            {
+                "id": "a1",
+                "name": "KP_report.xlsx",
+                "mimeType": "application/vnd.ms-excel",
+                "parents": ["client-a"],
+            },
         ],
         "client-b": [
-            {"id": "b1", "name": "Public Report.csv", "mimeType": "text/csv", "parents": ["client-b"]},
+            {
+                "id": "b1",
+                "name": "Public Report.csv",
+                "mimeType": "text/csv",
+                "parents": ["client-b"],
+            },
         ],
     }
 
-    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
+    def fake_list_folder_children(
+        service, folder_id, drive_id, cache_timeout_seconds=None
+    ):
         if folder_id == "root":
             return root_children
         return client_files.get(folder_id, [])
@@ -222,12 +310,16 @@ def test_move_files_to_client_public_folder(monkeypatch):
 
     def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
         moved.append((file_id, new_parent, previous_parents))
-        return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
+        return {
+            "file_id": file_id,
+            "new_parent": new_parent,
+            "previous_parents": previous_parents,
+        }
 
     monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
 
     results = move_files_to_public_folder(
-        None, drive_config, ["KP", "^Public Report\\.csv$"] , dry_run=False
+        None, drive_config, ["KP", "^Public Report\\.csv$"], dry_run=False
     )
 
     assert len(results) == 2
@@ -241,7 +333,8 @@ def test_move_files_to_client_public_folder(monkeypatch):
 def test_move_files_to_public_folder_requires_patterns(monkeypatch):
     drive_config = build_drive_config()
     monkeypatch.setattr(
-        "drive_audit.commands.ensure_public_subdir", lambda *args, **kwargs: {"id": "public"}
+        "drive_audit.commands.ensure_public_subdir",
+        lambda *args, **kwargs: {"id": "public"},
     )
 
     with pytest.raises(ValueError, match="file_matches"):
@@ -269,7 +362,9 @@ def test_move_files_from_csv_moves_listed_files(tmp_path, monkeypatch):
         def get(self, fileId, fields, supportsAllDrives):
             assert fields == "id,name,parents"
             assert supportsAllDrives is True
-            return FakeRequest({"id": fileId, "name": "KP Client", "parents": ["old-parent"]})
+            return FakeRequest(
+                {"id": fileId, "name": "KP Client", "parents": ["old-parent"]}
+            )
 
     class FakeService:
         def __init__(self):
