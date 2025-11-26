@@ -62,27 +62,32 @@ def main():
     )
     logger.setLevel(log_level)
         
-    # Override config with CLI args
-    if args.drive_id:
-        config_data['drive']['id'] = args.drive_id
-    if args.root_folder_id:
-        config_data['drive']['root_folder_id'] = args.root_folder_id
+    drive_section = config_data.setdefault('drive', {})
 
-    # Handle placeholder root_folder_id
-    if config_data['drive']['root_folder_id'] == 'ROOT_FOLDER_ID':
-        fallback_root = config_data['drive']['id'] or 'root'
-        logger.info(f"root_folder_id is placeholder, defaulting to drive_id: {fallback_root}")
-        config_data['drive']['root_folder_id'] = fallback_root
-    elif not config_data['drive']['root_folder_id']:
-        config_data['drive']['root_folder_id'] = config_data['drive'].get('id') or 'root'
+    # Override config with CLI args, allow empty drive.id
+    if args.drive_id:
+        drive_section['id'] = args.drive_id
+    drive_section['id'] = drive_section.get('id', '') or ''
+
+    if args.root_folder_id:
+        drive_section['root_folder_id'] = args.root_folder_id
+    root_folder_id = drive_section.get('root_folder_id')
+
+    # Handle placeholder or missing root_folder_id
+    if root_folder_id == 'ROOT_FOLDER_ID':
+        fallback_root = drive_section.get('id') or 'root'
+        logger.info(f"root_folder_id is placeholder, defaulting to drive scope: {fallback_root}")
+        drive_section['root_folder_id'] = fallback_root
+    elif not root_folder_id:
+        drive_section['root_folder_id'] = drive_section.get('id') or 'root'
 
     # Create DriveConfig object
     config = DriveConfig(
         credentials_file=config_data['google']['credentials_file'],
         delegated_user=config_data['google'].get('delegated_user'),
-        drive_id=config_data['drive']['id'],
-        root_folder_id=config_data['drive']['root_folder_id'],
-        root_folder_name=config_data['drive']['root_folder_name'],
+        drive_id=drive_section.get('id', ''),
+        root_folder_id=drive_section['root_folder_id'],
+        root_folder_name=drive_section['root_folder_name'],
         include_trashed=config_data['scan']['include_trashed'],
         include_shortcuts=config_data['scan']['include_shortcuts'],
         max_depth=config_data['scan'].get('max_depth'),
