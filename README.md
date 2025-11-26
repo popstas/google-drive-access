@@ -48,6 +48,8 @@ python -m src.drive_audit.main --drive-id <YOUR_DRIVE_ID> --root-folder-id <YOUR
 
 ## Configuration (`data/config.yml`)
 ```yaml
+lang: "en"
+
 google:
   credentials_file: "data/service-account.json"
 
@@ -93,6 +95,11 @@ http:
 ```
 
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
+
+Localization:
+
+- Set the top-level `lang` to `en` (default) or `ru` to localize HTTP responses.
+- If an unsupported language is provided, the server falls back to English.
 
 ## Commands
 

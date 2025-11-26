@@ -1,3 +1,5 @@
+lang: "en"
+
 google:
   credentials_file: "data/service-account.json"
   # delegated_user: "admin@company.com"
