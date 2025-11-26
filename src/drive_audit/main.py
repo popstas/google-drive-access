@@ -67,12 +67,15 @@ def main():
         config_data['drive']['id'] = args.drive_id
     if args.root_folder_id:
         config_data['drive']['root_folder_id'] = args.root_folder_id
-        
+
     # Handle placeholder root_folder_id
     if config_data['drive']['root_folder_id'] == 'ROOT_FOLDER_ID':
-        logger.info(f"root_folder_id is placeholder, defaulting to drive_id: {config_data['drive']['id']}")
-        config_data['drive']['root_folder_id'] = config_data['drive']['id']
-        
+        fallback_root = config_data['drive']['id'] or 'root'
+        logger.info(f"root_folder_id is placeholder, defaulting to drive_id: {fallback_root}")
+        config_data['drive']['root_folder_id'] = fallback_root
+    elif not config_data['drive']['root_folder_id']:
+        config_data['drive']['root_folder_id'] = config_data['drive'].get('id') or 'root'
+
     # Create DriveConfig object
     config = DriveConfig(
         credentials_file=config_data['google']['credentials_file'],

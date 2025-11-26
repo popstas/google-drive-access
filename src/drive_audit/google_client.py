@@ -10,6 +10,18 @@ logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
 
+
+def _build_drive_scoping_kwargs(drive_id: str) -> Dict[str, Any]:
+    if drive_id:
+        return {
+            "corpora": "drive",
+            "driveId": drive_id,
+            "includeItemsFromAllDrives": True,
+            "supportsAllDrives": True,
+        }
+
+    return {"corpora": "user"}
+
 def get_service(config: DriveConfig):
     """Authenticates and returns the Google Drive service."""
     creds = None
@@ -25,8 +37,11 @@ def get_service(config: DriveConfig):
     return build('drive', 'v3', credentials=creds)
 
 def get_drive_info(service, drive_id: str) -> Dict[str, Any]:
-    """Fetches information about the shared drive."""
+    """Fetches information about the shared drive or user drive."""
     try:
+        if not drive_id:
+            return service.about().get(fields="user, storageQuota").execute()
+
         return service.drives().get(driveId=drive_id).execute()
     except HttpError as error:
         logger.error(f"An error occurred: {error}")
@@ -58,11 +73,11 @@ def get_file_permissions(service, file_id: str) -> List[Dict[str, Any]]:
         return []
 
 def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[int] = None) -> Generator[Dict[str, Any], None, None]:
-    """Iterates over all files in the shared drive."""
+    """Iterates over all files in the shared or user drive."""
     page_token = None
     query = "trashed = false"
     count = 0
-    
+
     # Fields to retrieve - optimized for performance
     # Note: permissions are not returned by files.list() - we need to fetch them separately
     fields = "nextPageToken, files(id, name, mimeType, parents, createdTime, modifiedTime, viewedByMeTime, owners, lastModifyingUser, trashed, starred, size, shortcutDetails)"
@@ -74,16 +89,15 @@ def list_files(service, drive_id: str, page_size: int = 1000, limit: Optional[in
             if limit and (limit - count) < page_size:
                 current_page_size = limit - count
             
-            response = service.files().list(
-                corpora='drive',
-                driveId=drive_id,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True,
-                q=query,
-                pageSize=current_page_size,
-                fields=fields,
-                pageToken=page_token
-            ).execute()
+            request_kwargs = {
+                **_build_drive_scoping_kwargs(drive_id),
+                "q": query,
+                "pageSize": current_page_size,
+                "fields": fields,
+                "pageToken": page_token,
+            }
+
+            response = service.files().list(**request_kwargs).execute()
 
             for file in response.get('files', []):
                 yield file
@@ -138,14 +152,13 @@ def find_child_folder(service, parent_id: str, name: str, drive_id: str) -> Opti
         f"name = '{name}' and trashed = false"
     )
     try:
-        response = service.files().list(
-            corpora='drive',
-            driveId=drive_id,
-            includeItemsFromAllDrives=True,
-            supportsAllDrives=True,
-            q=query,
-            fields='files(id, name)'
-        ).execute()
+        request_kwargs = {
+            **_build_drive_scoping_kwargs(drive_id),
+            "q": query,
+            "fields": 'files(id, name)',
+        }
+
+        response = service.files().list(**request_kwargs).execute()
         files = response.get('files', [])
         if files:
             return files[0]
@@ -161,12 +174,13 @@ def create_folder(service, parent_id: str, name: str, drive_id: str) -> Dict[str
         "name": name,
         "mimeType": "application/vnd.google-apps.folder",
         "parents": [parent_id],
-        "driveId": drive_id,
     }
+    if drive_id:
+        body["driveId"] = drive_id
     try:
         return service.files().create(
             body=body,
-            supportsAllDrives=True,
+            supportsAllDrives=bool(drive_id),
             fields='id, name'
         ).execute()
     except HttpError as error:
@@ -220,16 +234,15 @@ def list_folder_children(service, folder_id: str, drive_id: str, page_size: int 
 
     while True:
         try:
-            response = service.files().list(
-                corpora='drive',
-                driveId=drive_id,
-                includeItemsFromAllDrives=True,
-                supportsAllDrives=True,
-                q=query,
-                pageSize=page_size,
-                fields=fields,
-                pageToken=page_token
-            ).execute()
+            request_kwargs = {
+                **_build_drive_scoping_kwargs(drive_id),
+                "q": query,
+                "pageSize": page_size,
+                "fields": fields,
+                "pageToken": page_token,
+            }
+
+            response = service.files().list(**request_kwargs).execute()
 
             for file in response.get('files', []):
                 yield file
