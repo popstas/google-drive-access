@@ -140,6 +140,17 @@ Run the command:
 python -m src.drive_audit.commands --config data/config.yml move_files_csv --dry-run
 ```
 
+## Testing and coverage
+
+Install test dependencies with the optional `test` extras and run pytest with coverage enabled:
+
+```bash
+pip install .[test]
+pytest --cov=src --cov=tests --cov-report=term --cov-report=xml
+```
+
+Coverage results are uploaded to Coveralls automatically via the `test` GitHub Actions workflow.
+
 ## HTTP server endpoints
 
 The HTTP server (see `src/drive_audit/server.py`) exposes authenticated endpoints for managing client folders. All successful responses use HTTP status 200 and include an `answer` field.

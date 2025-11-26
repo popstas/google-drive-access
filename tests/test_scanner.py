@@ -1,6 +1,6 @@
 import unittest
-from src.drive_audit.model import DriveConfig
-from src.drive_audit.scanner import build_file_tree
+from drive_audit.model import DriveConfig
+from drive_audit.scanner import build_file_tree
 
 class TestScanner(unittest.TestCase):
     def setUp(self):

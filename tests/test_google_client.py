@@ -1,4 +1,4 @@
-from src.drive_audit.google_client import (
+from drive_audit.google_client import (
     create_folder,
     DEFAULT_LIST_CHILDREN_CACHE_DIR,
     list_files,
