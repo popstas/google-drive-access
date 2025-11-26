@@ -23,6 +23,7 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
     google_section = config_data["google"]
     scan_section = config_data.get("scan", {})
     output_section = config_data.get("output", {})
+    cache_section = config_data.get("cache_timeouts", {})
 
     drive_id = drive_section["id"]
     root_folder_id = drive_section.get("root_folder_id") or drive_id
@@ -46,6 +47,9 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
         yaml_file=output_section.get("yaml_file", "drive_audit.yml"),
         files_csv=output_section.get("files_csv", "files.csv"),
         permissions_csv=output_section.get("permissions_csv", "permissions.csv"),
+        list_folder_children_cache_timeout=int(
+            cache_section.get("list_folder_children", 3600)
+        ),
     )
 
 
@@ -68,7 +72,10 @@ def move_files_to_public_folder(
     matched_files: List[Dict[str, Any]] = []
     public_folders: Dict[str, Dict[str, Any]] = {}
     for client_folder in list_folder_children(
-        service, drive_config.root_folder_id, drive_config.drive_id
+        service,
+        drive_config.root_folder_id,
+        drive_config.drive_id,
+        cache_timeout_seconds=drive_config.list_folder_children_cache_timeout,
     ):
         client_name = client_folder.get("name", "")
         client_folder_id = client_folder.get("id")
@@ -79,7 +86,12 @@ def move_files_to_public_folder(
             continue
 
         logger.debug("Scanning client folder %s (%s)", client_name, client_folder_id)
-        for file_data in list_folder_children(service, client_folder_id, drive_config.drive_id):
+        for file_data in list_folder_children(
+            service,
+            client_folder_id,
+            drive_config.drive_id,
+            cache_timeout_seconds=drive_config.list_folder_children_cache_timeout,
+        ):
             name = file_data.get("name", "")
             mime_type = file_data.get("mimeType", "")
             parents = file_data.get("parents", [])
@@ -148,7 +160,9 @@ def move_files_to_public_folder(
             )
             continue
 
-        updated = move_file(service, file_id, destination_parent, parents)
+        updated = move_file(
+            service, file_id, destination_parent, parents, drive_config.drive_id
+        )
         updated["destination_path"] = destination_path
         moved_files.append(updated)
         logger.info(
@@ -258,7 +272,9 @@ def move_files_from_csv(
             )
             continue
 
-        updated = move_file(service, file_id, destination_parent, parents)
+        updated = move_file(
+            service, file_id, destination_parent, parents, drive_config.drive_id
+        )
         updated["destination_parent"] = destination_parent
         moved_files.append(updated)
         logger.info(

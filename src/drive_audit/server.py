@@ -117,6 +117,7 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
     google_section = config_data["google"]
     scan_section = config_data.get("scan", {})
     output_section = config_data.get("output", {})
+    cache_section = config_data.get("cache_timeouts", {})
 
     drive_id = drive_section["id"]
     root_folder_id = drive_section.get("root_folder_id") or drive_id
@@ -140,6 +141,9 @@ def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
         yaml_file=output_section.get("yaml_file", "drive_audit.yml"),
         files_csv=output_section.get("files_csv", "files.csv"),
         permissions_csv=output_section.get("permissions_csv", "permissions.csv"),
+        list_folder_children_cache_timeout=int(
+            cache_section.get("list_folder_children", 3600)
+        ),
     )
 
 

@@ -63,6 +63,9 @@ scan:
   include_shortcuts: true
   public_subdir: "public"
 
+cache_timeouts:
+  list_folder_children: 3600  # cache folder children for 1 hour (seconds)
+
 commands:
   move_files_to_public_folder:
     file_match:
@@ -95,6 +98,8 @@ http:
 ```
 
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
+
+Folder child listings are cached per folder for `cache_timeouts.list_folder_children` seconds (default 1 hour) to reduce repeated API calls. The cache is cleared automatically after files are moved between folders. Set the timeout to `0` to disable caching.
 
 Localization:
 

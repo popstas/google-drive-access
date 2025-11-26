@@ -47,7 +47,7 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
         {"id": "4", "name": "child", "mimeType": "application/vnd.google-apps.folder", "parents": ["client"]},
     ]
 
-    def fake_list_folder_children(service, folder_id, drive_id):
+    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
         if folder_id == "root":
             return root_children
         if folder_id == "client":
@@ -58,7 +58,7 @@ def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
 
     moved = []
 
-    def fake_move_file(service, file_id, new_parent, previous_parents):
+    def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
         moved.append((file_id, new_parent, previous_parents))
         return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
 
@@ -94,7 +94,7 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
         {"id": "10", "name": "kp_summary.XLSX", "mimeType": "application/vnd.ms-excel", "parents": ["client"]},
     ]
 
-    def fake_list_folder_children(service, folder_id, drive_id):
+    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
         if folder_id == "root":
             return root_children
         if folder_id == "client":
@@ -105,7 +105,7 @@ def test_move_files_to_public_folder_matches_case_insensitive(monkeypatch):
 
     moved = []
 
-    def fake_move_file(service, file_id, new_parent, previous_parents):
+    def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
         moved.append((file_id, new_parent, previous_parents))
         return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
 
@@ -145,7 +145,7 @@ def test_move_files_to_client_public_folder(monkeypatch):
         ],
     }
 
-    def fake_list_folder_children(service, folder_id, drive_id):
+    def fake_list_folder_children(service, folder_id, drive_id, cache_timeout_seconds=None):
         if folder_id == "root":
             return root_children
         return client_files.get(folder_id, [])
@@ -154,7 +154,7 @@ def test_move_files_to_client_public_folder(monkeypatch):
 
     moved = []
 
-    def fake_move_file(service, file_id, new_parent, previous_parents):
+    def fake_move_file(service, file_id, new_parent, previous_parents, drive_id=None):
         moved.append((file_id, new_parent, previous_parents))
         return {"file_id": file_id, "new_parent": new_parent, "previous_parents": previous_parents}
 
@@ -214,7 +214,7 @@ def test_move_files_from_csv_moves_listed_files(tmp_path, monkeypatch):
 
     moved = []
 
-    def fake_move_file(service, file_id, new_parent, parents):
+    def fake_move_file(service, file_id, new_parent, parents, drive_id=None):
         moved.append((file_id, new_parent, parents))
         return {"file_id": file_id, "new_parent": new_parent, "parents": parents}
 
