@@ -42,6 +42,47 @@ class DriveConfig:
     permissions_csv: str
     list_folder_children_cache_timeout: int = 3600
 
+    @staticmethod
+    def _resolve_root_folder_id(root_folder_id: Optional[str], drive_id: str) -> str:
+        if root_folder_id == "ROOT_FOLDER_ID":
+            return drive_id or "root"
+        if not root_folder_id:
+            return drive_id or "root"
+        return root_folder_id
+
+    @staticmethod
+    def from_dict(config_data: Dict[str, Any]) -> "DriveConfig":
+        drive_section = config_data["drive"]
+        google_section = config_data["google"]
+        scan_section = config_data.get("scan", {})
+        output_section = config_data.get("output", {})
+        cache_section = config_data.get("cache_timeouts", {})
+
+        drive_id = drive_section.get("id", "")
+        root_folder_id = DriveConfig._resolve_root_folder_id(
+            drive_section.get("root_folder_id"), drive_id
+        )
+
+        return DriveConfig(
+            credentials_file=google_section["credentials_file"],
+            delegated_user=google_section.get("delegated_user"),
+            drive_id=drive_id,
+            root_folder_id=root_folder_id,
+            root_folder_name=drive_section["root_folder_name"],
+            include_trashed=scan_section.get("include_trashed", False),
+            include_shortcuts=scan_section.get("include_shortcuts", True),
+            max_depth=scan_section.get("max_depth"),
+            limit=scan_section.get("limit"),
+            public_subdir=scan_section.get("public_subdir"),
+            output_dir=output_section.get("dir", "./data"),
+            yaml_file=output_section.get("yaml_file", "drive_audit.yml"),
+            files_csv=output_section.get("files_csv", "files.csv"),
+            permissions_csv=output_section.get("permissions_csv", "permissions.csv"),
+            list_folder_children_cache_timeout=int(
+                cache_section.get("list_folder_children", 3600)
+            ),
+        )
+
 @dataclass
 class PermissionDetails:
     permission_type: str

@@ -112,41 +112,6 @@ def build_http_config(config_data: Dict[str, Any]) -> HttpConfig:
     return HttpConfig(port=int(http_section["port"]), token=str(http_section["token"]), lang=lang)
 
 
-def build_drive_config(config_data: Dict[str, Any]) -> DriveConfig:
-    drive_section = config_data["drive"]
-    google_section = config_data["google"]
-    scan_section = config_data.get("scan", {})
-    output_section = config_data.get("output", {})
-    cache_section = config_data.get("cache_timeouts", {})
-
-    drive_id = drive_section["id"]
-    root_folder_id = drive_section.get("root_folder_id") or drive_id
-    if root_folder_id == "ROOT_FOLDER_ID":
-        root_folder_id = drive_id or "root"
-    elif not root_folder_id:
-        root_folder_id = "root"
-
-    return DriveConfig(
-        credentials_file=google_section["credentials_file"],
-        delegated_user=google_section.get("delegated_user"),
-        drive_id=drive_id,
-        root_folder_id=root_folder_id,
-        root_folder_name=drive_section["root_folder_name"],
-        include_trashed=scan_section.get("include_trashed", False),
-        include_shortcuts=scan_section.get("include_shortcuts", True),
-        max_depth=scan_section.get("max_depth"),
-        limit=scan_section.get("limit"),
-        public_subdir=scan_section.get("public_subdir"),
-        output_dir=output_section.get("dir", "./data"),
-        yaml_file=output_section.get("yaml_file", "drive_audit.yml"),
-        files_csv=output_section.get("files_csv", "files.csv"),
-        permissions_csv=output_section.get("permissions_csv", "permissions.csv"),
-        list_folder_children_cache_timeout=int(
-            cache_section.get("list_folder_children", 3600)
-        ),
-    )
-
-
 def extract_folder_id(folder_url: str) -> str:
     parsed = urlparse(folder_url)
     query_params = parse_qs(parsed.query)
@@ -515,7 +480,7 @@ def main() -> None:
 
     planfix_config = build_planfix_config(config_data)
     http_config = build_http_config(config_data)
-    drive_config = build_drive_config(config_data)
+    drive_config = DriveConfig.from_dict(config_data)
 
     logger.info("Initializing Google Drive service")
     service = get_service(drive_config)
