@@ -6,6 +6,8 @@ Create name using angular commit message format.
 - Use snake_case for variables, functions and config.
 - In http server always use 200 status code for success responses and "answer" key with the response message.
 - Run Black and isort before committing changes; pre-commit configuration is provided for consistency.
+- Cover new features with tests.
+- Run tests before committing changes.
 
 ## Rules on new features:
 - Add documentation for new features to README.md
