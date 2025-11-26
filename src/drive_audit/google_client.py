@@ -1,6 +1,7 @@
 import os
 import logging
-from typing import Optional, Generator, Any, Dict, List
+import time
+from typing import Optional, Generator, Any, Dict, List, Tuple
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -9,6 +10,9 @@ from .model import DriveConfig
 logger = logging.getLogger(__name__)
 
 SCOPES = ['https://www.googleapis.com/auth/drive']
+
+_list_folder_children_cache: Dict[Tuple[str, str, int], Tuple[float, List[Dict[str, Any]]]] = {}
+DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT = 3600
 
 
 def _build_drive_scoping_kwargs(drive_id: str) -> Dict[str, Any]:
@@ -235,11 +239,67 @@ def ensure_public_subdir(service, parent_id: str, subdir_name: str, drive_id: st
     return folder
 
 
-def list_folder_children(service, folder_id: str, drive_id: str, page_size: int = 100) -> Generator[Dict[str, Any], None, None]:
-    """Yield direct children of a folder."""
+def _get_drive_scope(drive_id: str) -> str:
+    return drive_id or ""
+
+
+def reset_list_folder_children_cache(
+    folder_id: Optional[str] = None, drive_id: str = "", page_size: Optional[int] = None
+) -> None:
+    """Clear cached children for a folder (or all caches)."""
+
+    if folder_id is None:
+        _list_folder_children_cache.clear()
+        return
+
+    drive_scope = _get_drive_scope(drive_id)
+    keys_to_delete = [
+        key
+        for key in _list_folder_children_cache
+        if key[1] == folder_id and key[0] == drive_scope and (page_size is None or key[2] == page_size)
+    ]
+
+    for key in keys_to_delete:
+        _list_folder_children_cache.pop(key, None)
+
+
+def _get_cached_children(
+    drive_id: str, folder_id: str, page_size: int, cache_timeout_seconds: int
+) -> Optional[List[Dict[str, Any]]]:
+    cache_key = (_get_drive_scope(drive_id), folder_id, page_size)
+    cached_value = _list_folder_children_cache.get(cache_key)
+    if not cached_value:
+        return None
+
+    cached_at, cached_files = cached_value
+    if cache_timeout_seconds <= 0:
+        return None
+
+    if time.time() - cached_at < cache_timeout_seconds:
+        return list(cached_files)
+
+    _list_folder_children_cache.pop(cache_key, None)
+    return None
+
+
+def list_folder_children(
+    service,
+    folder_id: str,
+    drive_id: str,
+    page_size: int = 100,
+    cache_timeout_seconds: int = DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT,
+) -> Generator[Dict[str, Any], None, None]:
+    """Yield direct children of a folder, caching results for the configured duration."""
+    cached_files = _get_cached_children(drive_id, folder_id, page_size, cache_timeout_seconds)
+    if cached_files is not None:
+        for file in cached_files:
+            yield file
+        return
+
     page_token = None
     query = f"'{folder_id}' in parents and trashed = false"
     fields = "nextPageToken, files(id, name, mimeType, parents)"
+    fetched_files: List[Dict[str, Any]] = []
 
     while True:
         try:
@@ -254,6 +314,7 @@ def list_folder_children(service, folder_id: str, drive_id: str, page_size: int 
             response = service.files().list(**request_kwargs).execute()
 
             for file in response.get('files', []):
+                fetched_files.append(file)
                 yield file
 
             page_token = response.get('nextPageToken')
@@ -263,12 +324,18 @@ def list_folder_children(service, folder_id: str, drive_id: str, page_size: int 
             logger.error("An error occurred while listing children for %s: %s", folder_id, error)
             raise
 
+    if cache_timeout_seconds > 0:
+        cache_key = (_get_drive_scope(drive_id), folder_id, page_size)
+        _list_folder_children_cache[cache_key] = (time.time(), list(fetched_files))
 
-def move_file(service, file_id: str, new_parent_id: str, current_parents: List[str]) -> Dict[str, Any]:
-    """Move a file to a new parent, removing existing parents."""
+
+def move_file(
+    service, file_id: str, new_parent_id: str, current_parents: List[str], drive_id: str = ""
+) -> Dict[str, Any]:
+    """Move a file to a new parent, removing existing parents and invalidating caches."""
     remove_parents = ','.join(str(parent) for parent in current_parents)
     try:
-        return service.files().update(
+        updated = service.files().update(
             fileId=file_id,
             addParents=new_parent_id,
             removeParents=remove_parents,
@@ -278,3 +345,9 @@ def move_file(service, file_id: str, new_parent_id: str, current_parents: List[s
     except HttpError as error:
         logger.error("Failed to move file %s to %s: %s", file_id, new_parent_id, error)
         raise
+
+    reset_list_folder_children_cache(new_parent_id, drive_id)
+    for parent_id in current_parents:
+        reset_list_folder_children_cache(parent_id, drive_id)
+
+    return updated

@@ -15,6 +15,9 @@ scan:
   max_depth: null
   public_subdir: "public"
 
+cache_timeouts:
+  list_folder_children: 3600  # seconds
+
 commands:
   move_files_to_public_folder:
     file_match:

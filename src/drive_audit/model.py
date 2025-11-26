@@ -40,6 +40,7 @@ class DriveConfig:
     yaml_file: str
     files_csv: str
     permissions_csv: str
+    list_folder_children_cache_timeout: int = 3600
 
 @dataclass
 class PermissionDetails:

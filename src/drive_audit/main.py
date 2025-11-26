@@ -91,7 +91,10 @@ def main():
         output_dir=config_data['output']['dir'],
         yaml_file=config_data['output']['yaml_file'],
         files_csv=config_data['output']['files_csv'],
-        permissions_csv=config_data['output']['permissions_csv']
+        permissions_csv=config_data['output']['permissions_csv'],
+        list_folder_children_cache_timeout=int(
+            config_data.get('cache_timeouts', {}).get('list_folder_children', 3600)
+        ),
     )
     
     logger.info("Initializing Google Drive Service...")
