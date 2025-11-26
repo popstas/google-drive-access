@@ -226,16 +226,39 @@ def create_handler(planfix_client: PlanfixClient, service, http_config: HttpConf
             return google_accounts
 
         def _handle_set_client_folder_access(self, payload: Dict[str, Any]) -> None:
-            required_fields = ["contact_id", "folder_url", "task_id", "assignee_id"]
+            required_fields = ["contact_id", "folder_url"]
             missing_fields = [field for field in required_fields if field not in payload]
             if missing_fields:
                 self._send_json(200, {"answer": f"Missing fields: {', '.join(missing_fields)}"})
                 return
 
             try:
-                task_id = int(payload["task_id"])
-                initial_assignee_ids = normalize_assignee_ids(parse_assignee_ids(payload["assignee_id"]))
+                contact_id = int(payload["contact_id"])
                 folder_id = extract_folder_id(str(payload["folder_url"]))
+
+                has_task_id = "task_id" in payload
+                has_assignee_id = "assignee_id" in payload
+
+                if has_task_id and has_assignee_id:
+                    task_id = int(payload["task_id"])
+                    initial_assignee_ids = normalize_assignee_ids(
+                        parse_assignee_ids(payload["assignee_id"])
+                    )
+                elif not has_task_id and not has_assignee_id:
+                    client_task = planfix_client.get_client_task(contact_id)
+                    if not client_task.get("found"):
+                        self._send_json(200, {"answer": "Client task not found"})
+                        return
+
+                    task_id = int(client_task.get("taskId"))
+                    assignees = client_task.get("assignees", {}).get("users", [])
+                    initial_assignee_ids = normalize_assignee_ids(assignees)
+                else:
+                    self._send_json(
+                        200,
+                        {"answer": "task_id and assignee_id must both be provided or omitted"},
+                    )
+                    return
 
                 google_accounts = self._grant_access(task_id, initial_assignee_ids, folder_id)
             except ValueError as exc:
