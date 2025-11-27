@@ -97,6 +97,30 @@ def test_create_folder_omits_drive_scoping_when_missing_drive_id():
     assert call["supportsAllDrives"] is False
 
 
+def test_list_files_with_drive_id_uses_drive_corpora_and_limits_page_size():
+    responses = [
+        {"files": [{"id": "a"}]},
+        {"files": []},
+    ]
+    files_api = _FakeFilesList(responses)
+    service = _FakeService(files_api)
+
+    # limit smaller than page size forces adjusted page size
+    list(
+        DriveFiles(service, cache=ListFolderChildrenCache()).list_files(
+            "drive-123", page_size=50, limit=1
+        )
+    )
+
+    assert len(files_api.calls) == 1
+    call = files_api.calls[0]
+    assert call["corpora"] == "drive"
+    assert call["driveId"] == "drive-123"
+    assert call["includeItemsFromAllDrives"] is True
+    assert call["supportsAllDrives"] is True
+    assert call["pageSize"] == 1
+
+
 def test_list_folder_children_uses_cache(tmp_path):
     cache = ListFolderChildrenCache(tmp_path / "cache")
     responses = [
