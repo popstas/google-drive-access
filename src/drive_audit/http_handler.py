@@ -27,11 +27,12 @@ def create_handler(
     drive_config: DriveConfig,
     role: str,
 ):
-    language = http_config.lang
+    handler_http_config = http_config
+    handler_language = http_config.lang
 
     class AccessHandler(JsonRequestHandler):
-        http_config = http_config
-        language = language
+        http_config = handler_http_config
+        language = handler_language
 
         def _log_request(self, payload: Dict[str, Any]) -> None:
             logger.info(
