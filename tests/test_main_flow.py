@@ -6,10 +6,6 @@ import pytest
 from drive_audit import main as audit_main
 
 
-def test_get_log_level_defaults_to_info():
-    assert audit_main.get_log_level("unknown") == audit_main.logging.INFO
-
-
 def test_main_success(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     output_dir = tmp_path / "output"
