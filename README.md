@@ -146,7 +146,7 @@ Install test dependencies with the optional `test` extras and run pytest with co
 
 ```bash
 pip install .[test]
-pytest --cov=src --cov=tests --cov-report=term --cov-report=xml
+pytest --cov=src --cov-report=term --cov-report=xml
 ```
 
 Coverage results are uploaded to Coveralls automatically via the `test` GitHub Actions workflow.
