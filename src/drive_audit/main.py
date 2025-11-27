@@ -2,6 +2,7 @@ import argparse
 import logging
 import os
 import sys
+from pathlib import Path
 
 import yaml
 
@@ -42,17 +43,24 @@ def main():
 
     args = parser.parse_args()
 
+    log_file_path = Path("data") / "app.log"
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
+    log_handlers = [
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler(log_file_path, encoding="utf-8"),
+    ]
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=log_handlers,
+        force=True,
+    )
+
     # Load config first to get logLevel
     logger.info(f"Loading configuration from {args.config}")
     try:
         config_data = load_config(args.config)
     except FileNotFoundError:
-        # Use basic logging for error before config is loaded
-        logging.basicConfig(
-            level=logging.INFO,
-            format="%(asctime)s - %(levelname)s - %(message)s",
-            handlers=[logging.StreamHandler(sys.stdout)],
-        )
         logger.error(f"Config file not found: {args.config}")
         sys.exit(1)
 
@@ -64,7 +72,7 @@ def main():
     logging.basicConfig(
         level=log_level,
         format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
+        handlers=log_handlers,
         force=True,  # Override any existing configuration
     )
     logger.setLevel(log_level)

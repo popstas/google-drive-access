@@ -1,6 +1,7 @@
 import argparse
 import logging
 from http.server import HTTPServer
+from pathlib import Path
 
 from .config_loader import build_http_config, build_planfix_config, load_config
 from .google_client import get_service
@@ -22,8 +23,16 @@ def main() -> None:
 
     config_data = load_config(args.config)
     log_level_name = str(config_data.get("logLevel", "INFO")).upper()
+    log_file_path = Path("data") / "app.log"
+    log_file_path.parent.mkdir(parents=True, exist_ok=True)
     logging.basicConfig(
-        level=log_level_name, format="%(asctime)s - %(levelname)s - %(message)s"
+        level=log_level_name,
+        format="%(asctime)s - %(levelname)s - %(message)s",
+        handlers=[
+            logging.StreamHandler(),
+            logging.FileHandler(log_file_path, encoding="utf-8"),
+        ],
+        force=True,
     )
 
     planfix_config = build_planfix_config(config_data)
