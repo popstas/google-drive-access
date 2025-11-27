@@ -1,11 +1,11 @@
 import pytest
 
-from drive_audit.http_handler import (
-    LocalizedError,
+from drive_audit.access_service import (
     extract_folder_id,
     normalize_assignee_ids,
     parse_assignee_ids,
 )
+from drive_audit.http_utils import LocalizedError
 
 
 def test_extract_folder_id_supports_query_and_path():
