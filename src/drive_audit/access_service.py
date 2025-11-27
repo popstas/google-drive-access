@@ -2,10 +2,11 @@
 
 import ast
 import json
-import logging
 import re
 from typing import Any, Dict, List, Tuple, Union
 from urllib.parse import parse_qs, urlparse
+
+from loguru import logger
 
 from .google_client import (
     add_user_permission,
@@ -17,8 +18,6 @@ from .google_client import (
 from .http_utils import LocalizedError
 from .model import DriveConfig
 from .planfix_client import PlanfixClient
-
-logger = logging.getLogger(__name__)
 
 
 def extract_folder_id(folder_url: str) -> str:
@@ -99,7 +98,7 @@ def collect_google_accounts(
             seen_accounts.add(google_account)
             google_accounts.append(google_account)
             logger.debug(
-                "Collected google account %s for assignee %s",
+                "Collected google account {} for assignee {}",
                 google_account,
                 assignee_id,
             )

@@ -1,8 +1,9 @@
 """HTTP handler for managing Google Drive access."""
 
 import json
-import logging
 from typing import Any, Dict, List
+
+from loguru import logger
 
 from .access_service import (
     create_client_folder,
@@ -16,8 +17,6 @@ from .http_utils import JsonRequestHandler, LocalizedError
 from .model import DriveConfig, HttpConfig
 from .planfix_client import PlanfixClient
 from .translations import translate
-
-logger = logging.getLogger(__name__)
 
 
 def create_handler(
@@ -36,7 +35,7 @@ def create_handler(
 
         def _log_request(self, payload: Dict[str, Any]) -> None:
             logger.info(
-                "%s request: %s", self.path, json.dumps(payload, ensure_ascii=False)
+                "{} request: {}", self.path, json.dumps(payload, ensure_ascii=False)
             )
 
         def _format_accounts(self, accounts: List[str]) -> str:
@@ -94,7 +93,7 @@ def create_handler(
                 self.send_json(200, {"answer": self.translate(exc.key, **exc.context)})
                 return
             except Exception as exc:  # pylint: disable=broad-except
-                logger.exception("Failed to process request: %s", exc)
+                logger.exception("Failed to process request: {}", exc)
                 self.send_json(200, {"answer": self.translate("internal_server_error")})
                 return
 
@@ -166,7 +165,7 @@ def create_handler(
                 self.send_json(200, {"answer": self.translate(exc.key, **exc.context)})
                 return
             except Exception as exc:  # pylint: disable=broad-except
-                logger.exception("Failed to process request: %s", exc)
+                logger.exception("Failed to process request: {}", exc)
                 self.send_json(200, {"answer": self.translate("internal_server_error")})
                 return
 

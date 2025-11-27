@@ -1,5 +1,9 @@
 lang: "en"
 
+# Logging configuration
+# Available levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+logLevel: "INFO"
+
 google:
   credentials_file: "data/service-account.json"
   # delegated_user: "admin@company.com"

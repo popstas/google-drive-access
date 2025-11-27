@@ -1,5 +1,6 @@
-import logging
 from typing import Any, Dict, Generator, List, Optional
+
+from loguru import logger
 
 from .drive_cache import (
     DEFAULT_CACHE_ROOT,
@@ -14,8 +15,6 @@ from .drive_client import get_drive_info, get_service
 from .drive_files import DriveFiles
 from .drive_permissions import DrivePermissions
 from .model import DriveConfig
-
-logger = logging.getLogger(__name__)
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 

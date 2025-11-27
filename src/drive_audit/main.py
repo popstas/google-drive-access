@@ -1,35 +1,22 @@
 import argparse
-import logging
 import os
 import sys
 from pathlib import Path
 
 import yaml
+from loguru import logger
 
 from .export_csv import save_files_csv, save_permissions_csv
 from .export_yaml import save_yaml
 from .google_client import get_file_permissions, get_service, list_files
+from .logger_config import configure_logger
 from .model import DriveConfig
 from .scanner import build_file_tree
-
-logger = logging.getLogger(__name__)
 
 
 def load_config(config_path: str) -> dict:
     with open(config_path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
-
-
-def get_log_level(level_name: str) -> int:
-    """Convert string log level name to logging constant."""
-    level_map = {
-        "DEBUG": logging.DEBUG,
-        "INFO": logging.INFO,
-        "WARNING": logging.WARNING,
-        "ERROR": logging.ERROR,
-        "CRITICAL": logging.CRITICAL,
-    }
-    return level_map.get(level_name.upper(), logging.INFO)
 
 
 def main():
@@ -43,39 +30,27 @@ def main():
 
     args = parser.parse_args()
 
-    log_file_path = Path("data") / "app.log"
-    log_file_path.parent.mkdir(parents=True, exist_ok=True)
-    log_handlers = [
-        logging.StreamHandler(sys.stdout),
-        logging.FileHandler(log_file_path, encoding="utf-8"),
-    ]
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=log_handlers,
-        force=True,
-    )
-
     # Load config first to get logLevel
-    logger.info(f"Loading configuration from {args.config}")
     try:
         config_data = load_config(args.config)
     except FileNotFoundError:
-        logger.error(f"Config file not found: {args.config}")
+        # Use basic logger before configuration
+        from loguru import logger as temp_logger
+        temp_logger.error(f"Config file not found: {args.config}")
         sys.exit(1)
 
     # Configure logging from config
-    log_level = get_log_level(config_data.get("logLevel", "INFO"))
+    log_level = config_data.get("logLevel", "INFO").upper()
     if args.debug:
-        log_level = logging.DEBUG
+        log_level = "DEBUG"
 
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=log_handlers,
-        force=True,  # Override any existing configuration
+    log_file_path = Path("data") / "app.log"
+    configure_logger(
+        log_level=log_level,
+        log_file_path=log_file_path,
     )
-    logger.setLevel(log_level)
+
+    logger.info(f"Loading configuration from {args.config}")
 
     drive_section = config_data.setdefault("drive", {})
 

@@ -1,15 +1,13 @@
-import logging
 from typing import Any, Dict, Generator, List, Optional
 
 from googleapiclient.errors import HttpError
+from loguru import logger
 
 from .drive_cache import (
     DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT,
     ListFolderChildrenCache,
 )
 from .drive_permissions import DrivePermissions
-
-logger = logging.getLogger(__name__)
 
 
 class DriveFiles:
@@ -70,7 +68,7 @@ class DriveFiles:
                 if page_token is None:
                     break
             except HttpError as error:
-                logger.error("An error occurred while listing files: %s", error)
+                logger.error("An error occurred while listing files: {}", error)
                 raise
 
     def find_child_folder(
@@ -95,7 +93,7 @@ class DriveFiles:
             return None
         except HttpError as error:
             logger.error(
-                "Failed to search for folder %s under %s: %s", name, parent_id, error
+                "Failed to search for folder {} under {}: {}", name, parent_id, error
             )
             raise
 
@@ -115,7 +113,7 @@ class DriveFiles:
             )
         except HttpError as error:
             logger.error(
-                "Failed to create folder %s under %s: %s", name, parent_id, error
+                "Failed to create folder {} under {}: {}", name, parent_id, error
             )
             raise
 
@@ -126,7 +124,7 @@ class DriveFiles:
             existing_folder = self.find_child_folder(parent_id, subdir_name, drive_id)
         except HttpError as error:
             logger.warning(
-                "Failed to look up public subdir '%s' under %s: %s",
+                "Failed to look up public subdir '{}' under {}: {}",
                 subdir_name,
                 parent_id,
                 error,
@@ -134,11 +132,11 @@ class DriveFiles:
             existing_folder = None
         if existing_folder:
             logger.info(
-                "Public subdir '%s' already exists under %s", subdir_name, parent_id
+                "Public subdir '{}' already exists under {}", subdir_name, parent_id
             )
             folder = existing_folder
         else:
-            logger.info("Creating public subdir '%s' under %s", subdir_name, parent_id)
+            logger.info("Creating public subdir '{}' under {}", subdir_name, parent_id)
             folder = self.create_folder(parent_id, subdir_name, drive_id)
 
         self._permissions.ensure_public_permission(folder["id"])
@@ -185,7 +183,7 @@ class DriveFiles:
                     break
             except HttpError as error:
                 logger.error(
-                    "An error occurred while listing children for %s: %s. Returning partial results.",
+                    "An error occurred while listing children for {}: {}. Returning partial results.",
                     folder_id,
                     error,
                 )
@@ -217,7 +215,7 @@ class DriveFiles:
             )
         except HttpError as error:
             logger.error(
-                "Failed to move file %s to %s: %s", file_id, new_parent_id, error
+                "Failed to move file {} to {}: {}", file_id, new_parent_id, error
             )
             raise
 

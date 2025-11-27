@@ -1,11 +1,10 @@
 import json
-import logging
 import os
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 DEFAULT_CACHE_ROOT = Path("data/cache")
 DEFAULT_LIST_CHILDREN_CACHE_DIR = DEFAULT_CACHE_ROOT / "list_folder_children"
@@ -144,7 +143,7 @@ class ListFolderChildrenCache:
             with cache_file.open("w", encoding="utf-8") as cache_handle:
                 json.dump({"cached_at": cached_at, "files": cached_files}, cache_handle)
         except OSError:
-            logger.warning("Failed to persist cache file %s", cache_file)
+            logger.warning("Failed to persist cache file {}", cache_file)
 
     def _remove_disk_cache(self, cache_key: Tuple[str, str, int]) -> None:
         cache_file = self._get_cache_file_path(cache_key)

@@ -1,15 +1,15 @@
 import argparse
-import logging
 from http.server import HTTPServer
 from pathlib import Path
+
+from loguru import logger
 
 from .config_loader import build_http_config, build_planfix_config, load_config
 from .google_client import get_service
 from .http_handler import create_handler
+from .logger_config import configure_logger
 from .model import DriveConfig
 from .planfix_client import PlanfixClient
-
-logger = logging.getLogger(__name__)
 
 
 def main() -> None:
@@ -24,18 +24,12 @@ def main() -> None:
     config_data = load_config(args.config)
     log_level_name = str(config_data.get("logLevel", "INFO")).upper()
     log_file_path = Path("data") / "app.log"
-    log_file_path.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(
-        level=log_level_name,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_file_path, encoding="utf-8"),
-        ],
-        force=True,
+    configure_logger(
+        log_level=log_level_name,
+        log_file_path=log_file_path,
     )
     # Suppress file_cache warning from googleapiclient.discovery_cache
-    logging.getLogger("googleapiclient.discovery_cache").setLevel(logging.WARNING)
+    logger.disable("googleapiclient.discovery_cache")
 
     planfix_config = build_planfix_config(config_data)
     http_config = build_http_config(config_data)
@@ -49,7 +43,7 @@ def main() -> None:
         planfix_client, service, http_config, drive_config, planfix_config.role
     )
     server = HTTPServer(("", http_config.port), handler)
-    logger.info("Starting HTTP server on port %s", http_config.port)
+    logger.info("Starting HTTP server on port {}", http_config.port)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

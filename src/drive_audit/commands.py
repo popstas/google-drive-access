@@ -1,20 +1,20 @@
 import argparse
 import csv
-import logging
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
+
 from .google_client import get_service, move_file
-from .main import get_log_level, load_config
+from .logger_config import configure_logger
+from .main import load_config
 from .model import DriveConfig
 from .public_folder_ops import (
     collect_public_folder_matches,
     execute_public_folder_moves,
     validate_public_folder_move_inputs,
 )
-
-logger = logging.getLogger(__name__)
 
 
 def move_files_to_public_folder(
@@ -68,7 +68,7 @@ def move_files_from_csv(
 
             if not file_id or not dest_folder_id:
                 logger.warning(
-                    "Row %s is missing file_id or dest_folder; skipping entry '%s'",
+                    "Row {} is missing file_id or dest_folder; skipping entry '{}'",
                     index,
                     file_name or row,
                 )
@@ -84,7 +84,7 @@ def move_files_from_csv(
             )
 
     if not move_rows:
-        logger.info("No actionable rows detected in %s", csv_path)
+        logger.info("No actionable rows detected in {}", csv_path)
         return []
 
     moved_files: List[Dict[str, Any]] = []
@@ -102,7 +102,7 @@ def move_files_from_csv(
         parents = file_metadata.get("parents", [])
         if not parents:
             logger.warning(
-                "File %s (%s) has no parents; skipping",
+                "File {} ({}) has no parents; skipping",
                 file_metadata.get("name"),
                 file_id,
             )
@@ -112,7 +112,7 @@ def move_files_from_csv(
 
         if destination_parent in parents:
             logger.info(
-                "File %s (%s) already resides in destination %s",
+                "File {} ({}) already resides in destination {}",
                 file_name,
                 file_id,
                 destination_parent,
@@ -121,7 +121,7 @@ def move_files_from_csv(
 
         if dry_run:
             logger.info(
-                "[dry-run] Would move %s (%s) from %s to %s",
+                "[dry-run] Would move {} ({}) from {} to {}",
                 file_name,
                 file_id,
                 ",".join(parents),
@@ -142,7 +142,7 @@ def move_files_from_csv(
         updated["destination_parent"] = destination_parent
         moved_files.append(updated)
         logger.info(
-            "Moved %s (%s) from %s to %s",
+            "Moved {} ({}) from {} to {}",
             file_name,
             file_id,
             ",".join(parents),
@@ -186,17 +186,14 @@ def parse_args() -> argparse.Namespace:
 def main() -> None:
     args = parse_args()
 
-    logger.info("Loading configuration from %s", args.config)
     config_data = load_config(args.config)
 
-    log_level = get_log_level(config_data.get("logLevel", "INFO"))
+    log_level = config_data.get("logLevel", "INFO").upper()
     if args.debug:
-        log_level = logging.DEBUG
+        log_level = "DEBUG"
 
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-
-    log_handlers = [logging.StreamHandler(sys.stdout)]
 
     command_log_files = {
         "move_files_to_public_folder": "move_files_to_public_folder.log",
@@ -204,16 +201,13 @@ def main() -> None:
     }
     log_file_name = command_log_files.get(args.command, f"{args.command}.log")
     log_file_path = Path("data") / log_file_name
-    log_file_path.parent.mkdir(parents=True, exist_ok=True)
-    log_handlers.append(logging.FileHandler(log_file_path, encoding="utf-8"))
 
-    logging.basicConfig(
-        level=log_level,
-        format="%(asctime)s - %(levelname)s - %(message)s",
-        handlers=log_handlers,
-        force=True,
+    configure_logger(
+        log_level=log_level,
+        log_file_path=log_file_path,
     )
-    logger.setLevel(log_level)
+
+    logger.info("Loading configuration from {}", args.config)
 
     drive_config = DriveConfig.from_dict(config_data)
     service = get_service(drive_config)
@@ -259,14 +253,14 @@ def main() -> None:
         moved_files = move_files_to_public_folder(
             service, drive_config, file_matches, args.dry_run, mime_type_matches
         )
-        logger.info("%s files processed", len(moved_files))
+        logger.info("{} files processed", len(moved_files))
     elif args.command == "move_files_csv":
         command_config = config_data.get("commands", {}).get("move_files_csv", {})
         csv_file = (
             args.csv_file or command_config.get("csv_file") or "data/move_files.csv"
         )
         moved_files = move_files_from_csv(service, drive_config, csv_file, args.dry_run)
-        logger.info("%s files processed", len(moved_files))
+        logger.info("{} files processed", len(moved_files))
     else:
         raise ValueError(f"Unknown command: {args.command}")
 

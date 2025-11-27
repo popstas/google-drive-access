@@ -1,14 +1,13 @@
 """Shared HTTP handler utilities."""
 
 import json
-import logging
 from http.server import BaseHTTPRequestHandler
 from typing import Any, Dict
 
+from loguru import logger
+
 from .model import HttpConfig
 from .translations import translate
-
-logger = logging.getLogger(__name__)
 
 
 class LocalizedError(Exception):
@@ -25,13 +24,14 @@ class JsonRequestHandler(BaseHTTPRequestHandler):
     language: str
 
     def log_message(self, format: str, *args: Any) -> None:  # noqa: A003
-        logger.info("%s - %s", self.address_string(), format % args)
+        formatted_message = format % args if args else format
+        logger.info("{} - {}", self.address_string(), formatted_message)
 
     def translate(self, key: str, **context: Any) -> str:
         return translate(self.language, key, **context)
 
     def send_json(self, status_code: int, payload: Dict[str, Any]) -> None:
-        logger.info("%s answer: %s", self.path, json.dumps(payload, ensure_ascii=False))
+        logger.info("{} answer: {}", self.path, json.dumps(payload, ensure_ascii=False))
         response = json.dumps(payload).encode("utf-8")
         self.send_response(status_code)
         self.send_header("Content-Type", "application/json")

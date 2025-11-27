@@ -1,9 +1,7 @@
-import logging
 from typing import Any, Dict, List
 
 from googleapiclient.errors import HttpError
-
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 
 class DrivePermissions:
@@ -36,7 +34,7 @@ class DrivePermissions:
             return permissions
         except HttpError as error:
             logger.warning(
-                "Failed to fetch permissions for file %s: %s", file_id, error
+                "Failed to fetch permissions for file {}: {}", file_id, error
             )
             return []
 
@@ -46,7 +44,7 @@ class DrivePermissions:
         if role == "organizer":
             role = "fileOrganizer"
             logger.debug(
-                "Converted role 'organizer' to 'fileOrganizer' for file/folder %s",
+                "Converted role 'organizer' to 'fileOrganizer' for file/folder {}",
                 file_id,
             )
 
@@ -67,7 +65,7 @@ class DrivePermissions:
             )
         except HttpError as error:
             logger.error(
-                "Failed to add permission for %s on %s: %s", email, file_id, error
+                "Failed to add permission for {} on {}: {}", email, file_id, error
             )
             raise
 
@@ -77,7 +75,7 @@ class DrivePermissions:
             if permission.get("type") == "anyone":
                 return permission
 
-        logger.info("Setting public access for %s", file_id)
+        logger.info("Setting public access for {}", file_id)
         try:
             return (
                 self._service.permissions()
@@ -94,5 +92,5 @@ class DrivePermissions:
                 .execute()
             )
         except HttpError as error:
-            logger.error("Failed to set public permission for %s: %s", file_id, error)
+            logger.error("Failed to set public permission for {}: {}", file_id, error)
             raise

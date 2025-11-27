@@ -50,6 +50,10 @@ python -m src.drive_audit.main --drive-id <YOUR_DRIVE_ID> --root-folder-id <YOUR
 ```yaml
 lang: "en"
 
+# Logging configuration
+# Available levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+logLevel: "INFO"
+
 google:
   credentials_file: "data/service-account.json"
 
@@ -103,6 +107,22 @@ http:
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
 
 Folder child listings are cached per folder for `cache_timeouts.list_folder_children` seconds (default 1 hour) to reduce repeated API calls. The cache is cleared automatically after files are moved between folders. Set the timeout to `0` to disable caching.
+
+## Logging
+
+The project uses [Loguru](https://github.com/Delgan/loguru) for logging, which provides:
+- **Colorized console output** with automatic formatting
+- **Automatic file rotation** when log files reach 10 MB
+- **Compression** of old log files (ZIP format)
+- **Retention** of logs for 30 days
+- **Rich exception tracking** with full stack traces
+
+Logs are written to:
+- `data/app.log` - Main application logs (for CLI and HTTP server)
+- `data/move_files_to_public_folder.log` - Logs for the move_files_to_public_folder command
+- `data/move_files_csv.log` - Logs for the move_files_csv command
+
+Configure the log level in `config.yml` using the `logLevel` field (DEBUG, INFO, WARNING, ERROR, CRITICAL). You can also use the `--debug` flag with CLI commands to enable DEBUG level logging.
 
 Localization:
 

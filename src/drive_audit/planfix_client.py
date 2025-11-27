@@ -1,11 +1,9 @@
-import logging
 from typing import Any, Dict, List, Set
 
 import requests
+from loguru import logger
 
 from .model import PlanfixConfig
-
-logger = logging.getLogger(__name__)
 
 
 class PlanfixClient:
@@ -21,7 +19,7 @@ class PlanfixClient:
 
     def get_child_tasks(self, task_id: int) -> List[Dict[str, Any]]:
         payload = {"parentTaskId": task_id, "recursive": True}
-        logger.debug("Fetching child tasks for task_id=%s", task_id)
+        logger.debug("Fetching child tasks for task_id={}", task_id)
         response = requests.post(
             self._config.get_child_tasks.url,
             headers=self._headers(self._config.get_child_tasks.token),
@@ -33,12 +31,12 @@ class PlanfixClient:
         tasks = data.get("tasks", [])
         if not isinstance(tasks, list):
             raise ValueError("Unexpected response structure for child tasks")
-        logger.info("Received %s child tasks", len(tasks))
+        logger.info("Received {} child tasks", len(tasks))
         return tasks
 
     def get_manager(self, assignee_id: str) -> Dict[str, Any]:
         payload = {"id": int(assignee_id)}
-        logger.debug("Fetching manager for assignee_id=%s", assignee_id)
+        logger.debug("Fetching manager for assignee_id={}", assignee_id)
         response = requests.post(
             self._config.get_manager.url,
             headers=self._headers(self._config.get_manager.token),
@@ -47,12 +45,12 @@ class PlanfixClient:
         )
         response.raise_for_status()
         manager = response.json()
-        logger.debug("Manager lookup result for %s: %s", assignee_id, manager)
+        logger.debug("Manager lookup result for {}: {}", assignee_id, manager)
         return manager
 
     def get_client_task(self, client_id: int) -> Dict[str, Any]:
         payload = {"clientId": client_id}
-        logger.debug("Fetching client task for client_id=%s", client_id)
+        logger.debug("Fetching client task for client_id={}", client_id)
         response = requests.post(
             self._config.get_client_task.url,
             headers=self._headers(self._config.get_client_task.token),
@@ -61,7 +59,7 @@ class PlanfixClient:
         )
         response.raise_for_status()
         client_task = response.json()
-        logger.debug("Client task lookup result for %s: %s", client_id, client_task)
+        logger.debug("Client task lookup result for {}: {}", client_id, client_task)
         return client_task
 
     @staticmethod

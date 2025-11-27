@@ -1,11 +1,10 @@
-import logging
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+from loguru import logger
+
 from .model import AccessInfo, DriveConfig, FileInfo, Permission, PermissionDetails
 from .policy import check_policy
-
-logger = logging.getLogger(__name__)
 
 
 def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:

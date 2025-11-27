@@ -1,11 +1,10 @@
-import logging
 import re
 from typing import Any, Dict, Iterable, List, Set, Tuple
 
+from loguru import logger
+
 from .google_client import ensure_public_subdir, list_folder_children, move_file
 from .model import DriveConfig
-
-logger = logging.getLogger(__name__)
 
 
 def validate_public_folder_move_inputs(
@@ -44,7 +43,7 @@ def validate_public_folder_move_inputs(
     allowed_mime_types = {mime.lower() for mime in mime_types if mime}
 
     logger.debug(
-        "Validated inputs: %s filename patterns, %s mime types",
+        "Validated inputs: {} filename patterns, {} mime types",
         len(patterns),
         len(allowed_mime_types) if allowed_mime_types else "any",
     )
@@ -75,13 +74,13 @@ def collect_public_folder_matches(
         client_folder_id = client_folder.get("id")
         if client_folder.get("mimeType") != folder_mime or not client_folder_id:
             logger.debug(
-                "Skipping non-folder item %s (%s) at root level",
+                "Skipping non-folder item {} ({}) at root level",
                 client_name,
                 client_folder_id,
             )
             continue
 
-        logger.debug("Scanning client folder %s (%s)", client_name, client_folder_id)
+        logger.debug("Scanning client folder {} ({})", client_name, client_folder_id)
         for file_data in list_folder_children(
             service,
             client_folder_id,
@@ -94,7 +93,7 @@ def collect_public_folder_matches(
 
             if mime_type == folder_mime:
                 logger.debug(
-                    "Skipping subfolder %s (%s) under %s",
+                    "Skipping subfolder {} ({}) under {}",
                     name,
                     file_data.get("id"),
                     client_name,
@@ -122,7 +121,7 @@ def collect_public_folder_matches(
 
             if public_folder["id"] in parents:
                 logger.debug(
-                    "File %s (%s) already in public folder", name, file_data.get("id")
+                    "File {} ({}) already in public folder", name, file_data.get("id")
                 )
                 continue
 
@@ -134,7 +133,7 @@ def collect_public_folder_matches(
                 }
             )
 
-    logger.info("Collected %s files to move to public folders", len(matched_files))
+    logger.info("Collected {} files to move to public folders", len(matched_files))
     return matched_files
 
 
@@ -152,13 +151,13 @@ def execute_public_folder_moves(
         public_folder = match["public_folder"]
         file_id = file_data.get("id")
         if not file_id:
-            logger.debug("Skipping file without id: %s", file_data)
+            logger.debug("Skipping file without id: {}", file_data)
             continue
 
         parents = file_data.get("parents", [])
         if not parents:
             logger.warning(
-                "File %s (%s) has no parents; skipping", file_data.get("name"), file_id
+                "File {} ({}) has no parents; skipping", file_data.get("name"), file_id
             )
             continue
 
@@ -167,7 +166,7 @@ def execute_public_folder_moves(
 
         if dry_run:
             logger.info(
-                "[dry-run] Would move %s (%s) from %s to %s (%s)",
+                "[dry-run] Would move {} ({}) from {} to {} ({})",
                 file_data.get("name"),
                 file_id,
                 ",".join(parents),
@@ -190,7 +189,7 @@ def execute_public_folder_moves(
         updated["destination_path"] = destination_path
         moved_files.append(updated)
         logger.info(
-            "Moved %s (%s) from %s to %s (%s)",
+            "Moved {} ({}) from {} to {} ({})",
             file_data.get("name"),
             file_id,
             ",".join(parents),
