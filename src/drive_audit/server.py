@@ -34,6 +34,8 @@ def main() -> None:
         ],
         force=True,
     )
+    # Suppress file_cache warning from googleapiclient.discovery_cache
+    logging.getLogger("googleapiclient.discovery_cache").setLevel(logging.WARNING)
 
     planfix_config = build_planfix_config(config_data)
     http_config = build_http_config(config_data)
