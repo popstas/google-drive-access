@@ -150,42 +150,36 @@ def test_list_folder_children_skips_cache_when_disabled(tmp_path: Path):
 
 
 def test_ensure_public_subdir_reuses_existing(monkeypatch):
-    created: Dict[str, Dict] = {}
-    ensured: list[str] = []
+    class _FakeFiles:
+        def __init__(self):
+            self.calls: list[Dict[str, str]] = []
 
-    def fake_find_child_folder(service, parent_id, name, drive_id):
-        created["last_lookup"] = {
-            "parent_id": parent_id,
-            "name": name,
-            "drive_id": drive_id,
-        }
-        return {"id": "existing", "name": name}
+        def ensure_public_subdir(self, parent_id: str, subdir_name: str, drive_id: str):
+            self.calls.append(
+                {
+                    "parent_id": parent_id,
+                    "subdir_name": subdir_name,
+                    "drive_id": drive_id,
+                }
+            )
+            return {"id": "existing", "name": subdir_name}
 
-    def fake_create_folder(service, parent_id, name, drive_id):
-        created["created"] = {
-            "parent_id": parent_id,
-            "name": name,
-            "drive_id": drive_id,
-        }
-        return {"id": "new", "name": name}
+    fake_files = _FakeFiles()
 
-    def fake_ensure_public_permission(service, file_id):
-        ensured.append(file_id)
-        return {"id": file_id}
+    class _FakeFacade:
+        def __init__(self, files):
+            self.files = files
 
     monkeypatch.setattr(
-        "drive_audit.google_client.find_child_folder", fake_find_child_folder
-    )
-    monkeypatch.setattr("drive_audit.google_client.create_folder", fake_create_folder)
-    monkeypatch.setattr(
-        "drive_audit.google_client.ensure_public_permission",
-        fake_ensure_public_permission,
+        "drive_audit.google_client._with_facade",
+        lambda service: _FakeFacade(fake_files),
     )
 
     folder = ensure_public_subdir(
-        None, parent_id="parent", subdir_name="public", drive_id="drive"
+        object(), parent_id="parent", subdir_name="public", drive_id="drive"
     )
 
     assert folder["id"] == "existing"
-    assert "created" not in created
-    assert ensured == ["existing"]
+    assert fake_files.calls == [
+        {"parent_id": "parent", "subdir_name": "public", "drive_id": "drive"}
+    ]
