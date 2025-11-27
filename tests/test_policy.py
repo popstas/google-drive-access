@@ -122,6 +122,39 @@ class TestPolicy(unittest.TestCase):
         policy = check_policy(file_info, self.config)
         self.assertFalse(policy.public_outside_public_folder)
 
+    def test_is_public_by_domain(self):
+        file_info = FileInfo(
+            id="1",
+            name="file.txt",
+            type="file",
+            mime_type="text/plain",
+            parents=[],
+            created=datetime.now(),
+            modified=datetime.now(),
+            viewed=None,
+            trashed=False,
+            starred=False,
+            size_bytes=100,
+            owners=[],
+            last_modifying_user=None,
+            location="/ClientA/file.txt",
+            access=AccessInfo(
+                False, None, None, None, "domain", "reader", None, None, True
+            ),
+        )
+
+        policy = check_policy(file_info, self.config)
+        self.assertTrue(policy.is_public_by_domain)
+        self.assertFalse(policy.is_public_anyone)
+
+        file_info.access.general_access = "restricted"
+        file_info.access.permissions = [
+            Permission(id="p2", type="domain", role="reader")
+        ]
+
+        policy = check_policy(file_info, self.config)
+        self.assertTrue(policy.is_public_by_domain)
+
 
 if __name__ == "__main__":
     unittest.main()

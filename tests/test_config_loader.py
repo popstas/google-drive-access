@@ -1,6 +1,10 @@
 import pytest
 
-from drive_audit.config_loader import build_http_config, build_planfix_config
+from drive_audit.config_loader import (
+    build_http_config,
+    build_planfix_config,
+    load_config,
+)
 
 
 @pytest.fixture
@@ -57,3 +61,30 @@ def test_missing_http_section_raises_value_error(sample_config_data):
 
     with pytest.raises(ValueError):
         build_http_config(sample_config_data)
+
+
+def test_load_config_reads_yaml(tmp_path):
+    config_content = """
+lang: en
+http:
+  port: 8080
+  token: secret
+planfix:
+  getChildTasks:
+    url: child
+    token: a
+  getManager:
+    url: manager
+    token: b
+  getClientTask:
+    url: client
+    token: c
+  role: reader
+"""
+    config_path = tmp_path / "config.yml"
+    config_path.write_text(config_content)
+
+    config = load_config(str(config_path))
+
+    assert config["lang"] == "en"
+    assert config["http"]["port"] == 8080
