@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 import yaml
@@ -20,7 +20,7 @@ def save_yaml(files: List[FileInfo], config: DriveConfig, output_path: str):
     # Prepare the data structure
     data = {
         "version": 1,
-        "generated_at": datetime.utcnow().isoformat() + "Z",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "drive": {
             "id": config.drive_id,
             "name": "Shared Drive",  # We might want to fetch this if possible, but for now placeholder or config
