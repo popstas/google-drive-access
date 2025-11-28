@@ -36,6 +36,7 @@ def main():
     except FileNotFoundError:
         # Use basic logger before configuration
         from loguru import logger as temp_logger
+
         temp_logger.error(f"Config file not found: {args.config}")
         sys.exit(1)
 
@@ -85,24 +86,29 @@ def main():
             logger.info(f"Found {len(raw_files)} files/folders.")
 
         # 2. Fetch permissions for each file
-        logger.info("Fetching permissions for files...")
-        files_with_perms = 0
-        total_perms = 0
-        for idx, file_data in enumerate(raw_files, 1):
-            file_id = file_data.get("id")
-            if file_id:
-                permissions = get_file_permissions(service, file_id)
-                file_data["permissions"] = permissions
-                if permissions:
-                    files_with_perms += 1
-                    total_perms += len(permissions)
-                if idx % 10 == 0:
-                    logger.debug(
-                        f"Fetched permissions for {idx}/{len(raw_files)} files..."
-                    )
-        logger.info(
-            f"Finished fetching permissions. {files_with_perms} files have permissions ({total_perms} total permissions)."
-        )
+        if config.collect_permissions:
+            logger.info("Fetching permissions for files...")
+            files_with_perms = 0
+            total_perms = 0
+            for idx, file_data in enumerate(raw_files, 1):
+                file_id = file_data.get("id")
+                if file_id:
+                    permissions = get_file_permissions(service, file_id)
+                    file_data["permissions"] = permissions
+                    if permissions:
+                        files_with_perms += 1
+                        total_perms += len(permissions)
+                    if idx % 10 == 0:
+                        logger.debug(
+                            f"Fetched permissions for {idx}/{len(raw_files)} files..."
+                        )
+            logger.info(
+                "Finished fetching permissions. {} files have permissions ({} total permissions).",
+                files_with_perms,
+                total_perms,
+            )
+        else:
+            logger.info("Skipping permissions collection as per configuration.")
 
         # 3. Build Tree & Process
         logger.info("Processing files and building tree...")

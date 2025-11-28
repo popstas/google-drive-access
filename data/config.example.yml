@@ -16,6 +16,7 @@ drive:
 scan:
   include_trashed: false
   include_shortcuts: true
+  collect_permissions: true
   max_depth: null
   public_subdir: "public"
 

@@ -1,4 +1,5 @@
 """Loguru logger configuration module."""
+
 import sys
 from pathlib import Path
 from typing import Optional
@@ -24,7 +25,7 @@ def configure_logger(
         log_file_path: Path to log file. Defaults to data/app.log
         enable_file_logging: Whether to enable file logging
         enable_console_logging: Whether to enable console logging
-        rotation_size: Size at which log file rotates (e.g., "10 MB", "1 GB"). 
+        rotation_size: Size at which log file rotates (e.g., "10 MB", "1 GB").
                       None to disable size-based rotation (default on Windows due to seek issues)
         rotation_time: Time-based rotation (e.g., "1 day", "1 week"). Defaults to "1 day"
         retention: How long to keep old log files (e.g., "30 days", "1 week")
@@ -50,8 +51,12 @@ def configure_logger(
 
         # Use time-based rotation on Windows to avoid seek() issues with size-based rotation
         # On other platforms, use size-based rotation if specified
-        rotation = rotation_time if sys.platform == "win32" or rotation_size is None else rotation_size
-        
+        rotation = (
+            rotation_time
+            if sys.platform == "win32" or rotation_size is None
+            else rotation_size
+        )
+
         logger.add(
             str(log_file_path),
             format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
@@ -63,4 +68,3 @@ def configure_logger(
             backtrace=True,
             diagnose=True,
         )
-

@@ -86,3 +86,63 @@ def test_main_missing_config(monkeypatch, tmp_path):
 
     with pytest.raises(SystemExit):
         audit_main.main()
+
+
+def test_main_skips_permissions_when_disabled(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    output_dir = tmp_path / "output"
+    config_path.write_text(
+        """
+logLevel: INFO
+drive:
+  id: drive-id
+  root_folder_id: ROOT_FOLDER_ID
+  root_folder_name: Root
+google:
+  credentials_file: creds.json
+scan:
+  include_trashed: false
+  include_shortcuts: true
+  collect_permissions: false
+output:
+  dir: {output_dir}
+  yaml_file: data.yml
+  files_csv: files.csv
+  permissions_csv: perms.csv
+""".format(
+            output_dir=output_dir
+        )
+    )
+
+    monkeypatch.setattr(audit_main, "get_service", lambda cfg: SimpleNamespace())
+    monkeypatch.setattr(
+        audit_main,
+        "list_files",
+        lambda service, drive_id, limit=None: [
+            {"id": "file1", "name": "File 1"},
+        ],
+    )
+
+    def _unexpected_permissions(*args, **kwargs):
+        raise AssertionError("Permissions should not be fetched")
+
+    monkeypatch.setattr(audit_main, "get_file_permissions", _unexpected_permissions)
+
+    captured_files = {}
+
+    def _capture_files(files, cfg):
+        captured_files["files"] = files
+        return []
+
+    monkeypatch.setattr(audit_main, "build_file_tree", _capture_files)
+
+    monkeypatch.setattr(audit_main, "save_yaml", lambda data, cfg, path: None)
+    monkeypatch.setattr(audit_main, "save_files_csv", lambda data, path: None)
+    monkeypatch.setattr(audit_main, "save_permissions_csv", lambda data, path: None)
+
+    argv = ["prog", "--config", str(config_path)]
+    monkeypatch.setattr(sys, "argv", argv)
+
+    audit_main.main()
+
+    assert captured_files["files"][0].get("permissions") is None

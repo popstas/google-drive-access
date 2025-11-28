@@ -65,6 +65,7 @@ drive:
 scan:
   include_trashed: false
   include_shortcuts: true
+  collect_permissions: true
   public_subdir: "public"
 
 cache_timeouts:
@@ -103,6 +104,8 @@ http:
   port: 7587
   token: skldjfh
 ```
+
+Set `collect_permissions` to `false` if you only need the file list and want to skip fetching sharing permissions to reduce API calls. Permissions exports will be empty when collection is disabled.
 
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
 
