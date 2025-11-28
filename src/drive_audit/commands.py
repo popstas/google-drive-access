@@ -16,8 +16,8 @@ from .public_folder_ops import (
     validate_public_folder_move_inputs,
 )
 
-DEFAULT_COMPARE_NEW_PATH = Path("compare_only_new.csv")
-DEFAULT_COMPARE_OLD_PATH = Path("compare_only_old.csv")
+DEFAULT_COMPARE_NEW_PATH = Path("data") / "compare_only_new.csv"
+DEFAULT_COMPARE_OLD_PATH = Path("data") / "compare_only_old.csv"
 
 
 def move_files_to_public_folder(
@@ -212,6 +212,7 @@ def compare_files_by_location(
     ]
 
     def write_rows(rows: List[Dict[str, str]], output_path: Path) -> Path:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
         with output_path.open("w", newline="", encoding="utf-8") as csv_handle:
             writer = csv.DictWriter(csv_handle, fieldnames=combined_fieldnames)
             writer.writeheader()

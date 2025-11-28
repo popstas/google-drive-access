@@ -164,8 +164,8 @@ python -m src.drive_audit.commands --config data/config.yml move_files_csv --dry
 ### compare_files
 
 Compare two CSV exports (such as those produced by `files.csv`) by their `location` column and write the rows that only exist in
-one file. Outputs are written to `compare_only_new.csv` (rows unique to the new CSV) and `compare_only_old.csv` (rows unique to
-the old CSV) in the current working directory.
+one file. Outputs are written to `data/compare_only_new.csv` (rows unique to the new CSV) and `data/compare_only_old.csv` (rows
+unique to the old CSV).
 
 Run the command:
 
