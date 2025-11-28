@@ -186,6 +186,46 @@ def build_fieldnames(primary: Sequence[str], secondary: Sequence[str]) -> List[s
     return merged
 
 
+MIME_NORMALIZATION_GROUPS = {
+    "spreadsheet": {
+        "mimes": {
+            "application/vnd.google-apps.spreadsheet",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        },
+        "extensions": {".xlsx"},
+    },
+    "document": {
+        "mimes": {
+            "application/vnd.google-apps.document",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+        "extensions": {".docx"},
+    },
+}
+
+
+def normalize_location(row: Dict[str, str]) -> str:
+    location = (row.get("location") or "").strip()
+    mime_type = (row.get("mimeType") or "").strip()
+    suffix = Path(location).suffix.lower()
+
+    matched_group = None
+    for group_name, group_values in MIME_NORMALIZATION_GROUPS.items():
+        if mime_type in group_values["mimes"]:
+            matched_group = group_name
+            break
+        if suffix in group_values["extensions"]:
+            matched_group = group_name
+            break
+
+    if matched_group:
+        extensions = MIME_NORMALIZATION_GROUPS[matched_group]["extensions"]
+        if suffix in extensions:
+            location = location[: -len(suffix)]
+
+    return location
+
+
 def compare_files_by_location(
     csv_old: Path,
     csv_new: Path,
@@ -197,18 +237,18 @@ def compare_files_by_location(
 
     combined_fieldnames = build_fieldnames(old_fields, new_fields)
 
-    old_locations = {(row.get("location") or "").strip() for row in old_rows}
-    new_locations = {(row.get("location") or "").strip() for row in new_rows}
+    old_locations = {normalize_location(row) for row in old_rows}
+    new_locations = {normalize_location(row) for row in new_rows}
 
     new_only_rows = [
         row
         for row in new_rows
-        if (row.get("location") or "").strip() not in old_locations
+        if normalize_location(row) not in old_locations
     ]
     old_only_rows = [
         row
         for row in old_rows
-        if (row.get("location") or "").strip() not in new_locations
+        if normalize_location(row) not in new_locations
     ]
 
     def write_rows(rows: List[Dict[str, str]], output_path: Path) -> Path:

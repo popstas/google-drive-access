@@ -191,6 +191,55 @@ def test_compare_files_by_location_writes_differences(tmp_path: Path):
     assert old_diff_rows == [{"location": "ClientA/File1", "name": "File1"}]
 
 
+def test_compare_files_by_location_normalizes_google_and_office_formats(tmp_path: Path):
+    csv_old = tmp_path / "old.csv"
+    csv_new = tmp_path / "new.csv"
+
+    old_rows = [
+        {
+            "location": "/Sandeep Koppula/Sandeep Koppula",
+            "mimeType": "application/vnd.google-apps.spreadsheet",
+        },
+        {
+            "location": "/Anita/Resume - Anna Petrovska.docx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+    ]
+    new_rows = [
+        {
+            "location": "/Sandeep Koppula/Sandeep Koppula.xlsx",
+            "mimeType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        },
+        {
+            "location": "/Anita/Resume - Anna Petrovska",
+            "mimeType": "application/vnd.google-apps.document",
+        },
+        {"location": "/Only/New", "mimeType": "text/plain"},
+    ]
+
+    with csv_old.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["location", "mimeType"])
+        writer.writeheader()
+        writer.writerows(old_rows)
+
+    with csv_new.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["location", "mimeType"])
+        writer.writeheader()
+        writer.writerows(new_rows)
+
+    outputs = compare_files_by_location(csv_old, csv_new)
+
+    with outputs["new"].open(encoding="utf-8") as handle:
+        new_diff_rows = list(csv.DictReader(handle))
+    with outputs["old"].open(encoding="utf-8") as handle:
+        old_diff_rows = list(csv.DictReader(handle))
+
+    assert new_diff_rows == [
+        {"location": "/Only/New", "mimeType": "text/plain"}
+    ]
+    assert old_diff_rows == []
+
+
 def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     drive_config = build_drive_config()
 

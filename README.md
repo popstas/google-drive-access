@@ -165,7 +165,8 @@ python -m src.drive_audit.commands --config data/config.yml move_files_csv --dry
 
 Compare two CSV exports (such as those produced by `files.csv`) by their `location` column and write the rows that only exist in
 one file. Outputs are written to `data/compare_only_new.csv` (rows unique to the new CSV) and `data/compare_only_old.csv` (rows
-unique to the old CSV).
+unique to the old CSV). When comparing, Google-native files and their Office exports are treated as the same item (for example,
+`/Client/File` with mime type `application/vnd.google-apps.document` matches `/Client/File.docx`).
 
 Run the command:
 
