@@ -121,6 +121,7 @@ Logs are written to:
 - `data/app.log` - Main application logs (for CLI and HTTP server)
 - `data/move_files_to_public_folder.log` - Logs for the move_files_to_public_folder command
 - `data/move_files_csv.log` - Logs for the move_files_csv command
+- `data/compare_files.log` - Logs for the compare_files command
 
 Configure the log level in `config.yml` using the `logLevel` field (DEBUG, INFO, WARNING, ERROR, CRITICAL). You can also use the `--debug` flag with CLI commands to enable DEBUG level logging.
 
@@ -158,6 +159,18 @@ Run the command:
 
 ```bash
 python -m src.drive_audit.commands --config data/config.yml move_files_csv --dry-run
+```
+
+### compare_files
+
+Compare two CSV exports (such as those produced by `files.csv`) by their `location` column and write the rows that only exist in
+one file. Outputs are written to `compare_only_new.csv` (rows unique to the new CSV) and `compare_only_old.csv` (rows unique to
+the old CSV) in the current working directory.
+
+Run the command:
+
+```bash
+python -m src.drive_audit.commands --config data/config.yml compare_files data/files_old.csv data/files_new.csv
 ```
 
 ## Testing and coverage

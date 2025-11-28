@@ -2,7 +2,7 @@ import argparse
 import csv
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 from loguru import logger
 
@@ -15,6 +15,9 @@ from .public_folder_ops import (
     execute_public_folder_moves,
     validate_public_folder_move_inputs,
 )
+
+DEFAULT_COMPARE_NEW_PATH = Path("compare_only_new.csv")
+DEFAULT_COMPARE_OLD_PATH = Path("compare_only_old.csv")
 
 
 def move_files_to_public_folder(
@@ -152,6 +155,86 @@ def move_files_from_csv(
     return moved_files
 
 
+def read_csv_rows(csv_path: Path) -> tuple[List[Dict[str, str]], Sequence[str]]:
+    if not csv_path.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_path}")
+    if not csv_path.is_file():
+        raise ValueError(f"CSV path must be a file: {csv_path}")
+
+    with csv_path.open(encoding="utf-8-sig", newline="") as csv_handle:
+        reader = csv.DictReader(csv_handle)
+        if not reader.fieldnames or "location" not in reader.fieldnames:
+            raise ValueError(
+                "CSV must include a 'location' column to support comparison"
+            )
+        rows = [row for row in reader]
+
+    return rows, reader.fieldnames
+
+
+def build_fieldnames(primary: Sequence[str], secondary: Sequence[str]) -> List[str]:
+    if list(primary) == list(secondary):
+        return list(primary)
+
+    merged: List[str] = []
+    for field in primary:
+        if field not in merged:
+            merged.append(field)
+    for field in secondary:
+        if field not in merged:
+            merged.append(field)
+    return merged
+
+
+def compare_files_by_location(
+    csv_old: Path,
+    csv_new: Path,
+    output_new_path: Path = DEFAULT_COMPARE_NEW_PATH,
+    output_old_path: Path = DEFAULT_COMPARE_OLD_PATH,
+) -> Dict[str, Path]:
+    old_rows, old_fields = read_csv_rows(csv_old)
+    new_rows, new_fields = read_csv_rows(csv_new)
+
+    combined_fieldnames = build_fieldnames(old_fields, new_fields)
+
+    old_locations = {(row.get("location") or "").strip() for row in old_rows}
+    new_locations = {(row.get("location") or "").strip() for row in new_rows}
+
+    new_only_rows = [
+        row
+        for row in new_rows
+        if (row.get("location") or "").strip() not in old_locations
+    ]
+    old_only_rows = [
+        row
+        for row in old_rows
+        if (row.get("location") or "").strip() not in new_locations
+    ]
+
+    def write_rows(rows: List[Dict[str, str]], output_path: Path) -> Path:
+        with output_path.open("w", newline="", encoding="utf-8") as csv_handle:
+            writer = csv.DictWriter(csv_handle, fieldnames=combined_fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow(
+                    {field: row.get(field, "") for field in combined_fieldnames}
+                )
+        return output_path
+
+    output_new = write_rows(new_only_rows, output_new_path)
+    output_old = write_rows(old_only_rows, output_old_path)
+
+    logger.info(
+        "Wrote {} new-only rows to {} and {} old-only rows to {}",
+        len(new_only_rows),
+        output_new,
+        len(old_only_rows),
+        output_old,
+    )
+
+    return {"new": output_new, "old": output_old}
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Drive audit commands")
     parser.add_argument(
@@ -179,6 +262,13 @@ def parse_args() -> argparse.Namespace:
     csv_parser.add_argument(
         "--dry-run", action="store_true", help="Show actions without moving files"
     )
+
+    compare_parser = subparsers.add_parser(
+        "compare_files",
+        help="Compare two CSV exports by location and write the differences",
+    )
+    compare_parser.add_argument("csv_old", help="Path to the baseline CSV export")
+    compare_parser.add_argument("csv_new", help="Path to the new CSV export")
 
     return parser.parse_args()
 
@@ -261,6 +351,8 @@ def main() -> None:
         )
         moved_files = move_files_from_csv(service, drive_config, csv_file, args.dry_run)
         logger.info("{} files processed", len(moved_files))
+    elif args.command == "compare_files":
+        compare_files_by_location(Path(args.csv_old), Path(args.csv_new))
     else:
         raise ValueError(f"Unknown command: {args.command}")
 

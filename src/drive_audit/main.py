@@ -36,6 +36,7 @@ def main():
     except FileNotFoundError:
         # Use basic logger before configuration
         from loguru import logger as temp_logger
+
         temp_logger.error(f"Config file not found: {args.config}")
         sys.exit(1)
 
