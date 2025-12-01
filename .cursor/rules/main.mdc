@@ -1,0 +1,110 @@
+---
+alwaysApply: true
+---
+## Coding standards
+- Use snake_case for variables, functions and config.
+- In http server always use 200 status code for success responses and "answer" key with the response message.
+- Run Black and isort before committing changes; pre-commit configuration is provided for consistency.
+- Cover new features with tests.
+- Run tests before committing changes.
+
+## Rules on new features:
+- Add documentation for new features to README.md
+- Add new config variables to config.example.yml
+
+## Rules on compare changes:
+- Before making compare changes: run `python check_compare_results.py` to establish baseline row counts
+- After compare changes: run `compare_files`, then run `python check_compare_results.py` to verify row counts decreased (both new-only and old-only should be smaller)
+- If row counts increased, investigate and fix normalization issues before proceeding
+- After verifying counts decreased: run `python find_similar_files.py` to find remaining normalization issues and fix them
+- Check compare_only_new.csv output file to review results
+- when recieve `fix example:\nold_location\nnew_location`, fix normalization issues
+
+# important rule for compare changes:
+- in the end use smarthome_tts_voice, скажи по-русски, сколько в новом файле было различий и стало.
+
+Shared drive structure: Level 1: clients folders. Folder names as client name. Level 2+: client's files
+
+# Why normalization issues was created:
+- We exported all docs from old drive to zip and extracted it to new drive.
+- Some files while export was converted:
+- google docs was converted to docx, pptx, xlsx, etc.
+- symbols in file names was converted to compatible with Windows file names
+- you need to find all files with normalization issues and fix them
+
+Отвечу как инженер по миграциям Google Workspace/Drive (экспорт-импорт, нормализация имён, дифф папок).
+
+**TL;DR**: При скачивании папки/файлов из Google Drive “в ZIP” Google-форматы не скачиваются “как есть” - они **экспортируются** в другие форматы. Для агента сравнения дисков нужно заложить маппинг `mimeType Google -> набор возможных выходных расширений` (и понимать, что часть экспортов - “урезанные”, типа CSV только 1-й лист).
+
+Ниже - **все конвертации (экспортные форматы)**, которые стоит учитывать в коде сравнения, если источник - Google Workspace файлы.
+
+### 1) Google Docs (application/vnd.google-apps.document)
+
+Может экспортироваться в:
+
+* `.docx`, `.odt`, `.rtf`, `.pdf`, `.txt`, `.zip` (HTML как zip), `.epub`, `.md` ([Google for Developers][1])
+
+Практически в “Download/ZIP” чаще всего встречается `.docx` (это вы уже увидели), но агенту лучше считать эквивалентными все варианты выше при сравнении “что было на старом диске” vs “что стало после zip-распаковки”.
+
+### 2) Google Sheets (application/vnd.google-apps.spreadsheet)
+
+Может экспортироваться в:
+
+* `.xlsx`, `.ods`, `.pdf`, `.zip` (HTML), `.csv` (только 1-й лист), `.tsv` (только 1-й лист) ([Google for Developers][1])
+
+Важно для диффа: если вдруг где-то вместо `.xlsx` оказался `.csv/.tsv`, это **не эквивалент** по содержимому, потому что “first-sheet only”.
+
+### 3) Google Slides (application/vnd.google-apps.presentation)
+
+Может экспортироваться в:
+
+* `.pptx`, `.odp`, `.pdf`, `.txt`, а также как картинка **только 1-го слайда**: `.jpg/.png/.svg` ([Google for Developers][1])
+
+Для агента: `.pptx` обычно “норм”, но если встретите `.png/.jpg/.svg` - это **частичный экспорт**.
+
+### 4) Google Drawings (application/vnd.google-apps.drawing)
+
+Может экспортироваться в:
+
+* `.pdf`, `.jpg`, `.png`, `.svg` ([Google for Developers][1])
+
+Отдельный практический нюанс: при “Download” из Drive многие наблюдают автоконвертацию именно в **.jpg** (то есть не-редактируемый растр), что легко создаёт “ложные различия” ([Web Applications Stack Exchange][2]).
+
+### 5) Google Forms (application/vnd.google-apps.form)
+
+Экспорт поддерживается как:
+
+* `.zip` ([Stack Overflow][3])
+
+То есть в распакованном архиве формы будут выглядеть как zip-файлы (это нормально).
+
+### 6) Google Apps Script (application/vnd.google-apps.script)
+
+Может экспортироваться в:
+
+* `.json` ([Google for Developers][1])
+
+### 7) Google Vids (application/vnd.google-apps.video / “Google Vids”)
+
+Может экспортироваться в:
+
+* `.mp4` ([Google for Developers][1])
+
+### 8) Jamboard (application/vnd.google-apps.jam)
+
+Jamboard сворачивают, и “жамы” конвертируются/экспортируются в:
+
+* `.pdf` ([Google Справка][4])
+
+---
+
+### Что я бы заложил в логику сравнения (в терминах агента)
+
+1. Для каждого Google-объекта на “старом” диске сравнение вести не с одним расширением, а с **множеством допустимых экспортов** (список выше). Источник для полного списка - `exportFormats` Drive API (официальная таблица как раз об этом) ([Google for Developers][1]).
+2. Отдельно пометить “урезанные экспорты”: `Sheets -> csv/tsv (first sheet only)`, `Slides -> jpg/png/svg (first slide only)` ([Google for Developers][1]) - их нельзя считать честной заменой исходнику.
+3. Для Drawings учитывать, что “Download/ZIP” может увести в растр (часто `.jpg`) и это ожидаемо при таком способе бэкапа ([Web Applications Stack Exchange][2]).
+
+[1]: https://developers.google.com/workspace/drive/api/guides/ref-export-formats "Export MIME types for Google Workspace documents  |  Google Drive  |  Google for Developers"
+[2]: https://webapps.stackexchange.com/questions/129640/how-to-download-google-drawings-files-raw-from-google-drive?utm_source=chatgpt.com "How to download Google Drawings files 'raw' from ..."
+[3]: https://stackoverflow.com/questions/65524616/exporting-a-google-form?utm_source=chatgpt.com "Exporting a Google Form"
+[4]: https://support.google.com/jamboard/answer/14084927?hl=en&utm_source=chatgpt.com "Google Jamboard is winding down"

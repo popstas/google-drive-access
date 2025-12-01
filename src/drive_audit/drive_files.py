@@ -1,4 +1,5 @@
 from typing import Any, Dict, Generator, List, Optional
+from unicodedata import normalize
 
 from googleapiclient.errors import HttpError
 from loguru import logger
@@ -8,6 +9,21 @@ from .drive_cache import (
     ListFolderChildrenCache,
 )
 from .drive_permissions import DrivePermissions
+
+
+def normalize_unicode(text: str) -> str:
+    """
+    Normalize Unicode text to NFC (Canonical Composition) form.
+    
+    This ensures that characters like 'й' are always represented consistently,
+    whether they come as a single character (U+0439) or as decomposed
+    characters (U+0438 + U+0306).
+    
+    NFC is the standard form for most text processing and storage.
+    """
+    if not text:
+        return text
+    return normalize("NFC", text)
 
 
 class DriveFiles:
@@ -74,10 +90,14 @@ class DriveFiles:
     def find_child_folder(
         self, parent_id: str, name: str, drive_id: str
     ) -> Optional[Dict[str, Any]]:
+        # Normalize the search name to ensure consistent Unicode matching
+        normalized_name = normalize_unicode(name)
+        
+        # First, try exact match with normalized name
         query = (
             f"'{parent_id}' in parents and "
             "mimeType = 'application/vnd.google-apps.folder' and "
-            f"name = '{name}' and trashed = false"
+            f"name = '{normalized_name}' and trashed = false"
         )
         try:
             request_kwargs = {
@@ -90,6 +110,28 @@ class DriveFiles:
             files = response.get("files", [])
             if files:
                 return files[0]
+            
+            # Fallback: if exact match fails, fetch all folders and compare normalized names
+            # This handles cases where folders exist with different Unicode normalization
+            query_fallback = (
+                f"'{parent_id}' in parents and "
+                "mimeType = 'application/vnd.google-apps.folder' and "
+                "trashed = false"
+            )
+            request_kwargs_fallback = {
+                **self._build_drive_scoping_kwargs(drive_id),
+                "q": query_fallback,
+                "fields": "files(id, name)",
+            }
+            
+            response_fallback = self._service.files().list(**request_kwargs_fallback).execute()
+            all_folders = response_fallback.get("files", [])
+            
+            for folder in all_folders:
+                folder_name = folder.get("name", "")
+                if normalize_unicode(folder_name) == normalized_name:
+                    return folder
+            
             return None
         except HttpError as error:
             logger.error(
@@ -98,8 +140,10 @@ class DriveFiles:
             raise
 
     def create_folder(self, parent_id: str, name: str, drive_id: str) -> Dict[str, Any]:
+        # Normalize the folder name to ensure consistent Unicode representation
+        normalized_name = normalize_unicode(name)
         body = {
-            "name": name,
+            "name": normalized_name,
             "mimeType": "application/vnd.google-apps.folder",
             "parents": [parent_id],
         }

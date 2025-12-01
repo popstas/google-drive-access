@@ -70,6 +70,13 @@ scan:
 cache_timeouts:
   list_folder_children: 3600  # cache folder children for 1 hour (seconds)
 
+compare:
+  ignore_public_subdir: false  # If true, ignore public_subdir folder itself, but not its children
+  normalize_file_names: false  # If true, normalize file/folder names by replacing forbidden characters with '_'
+  ignore_format_differences: false  # If true, ignore format mismatches in comparison (same file, different format)
+  ignore_duplicate_suffixes: false  # If true, ignore duplicate suffixes like (1), (2), etc. in file names
+  ignore_folders: []  # List of folder names to ignore (only folders with children are ignored)
+
 commands:
   move_files_to_public_folder:
     file_match:
@@ -167,6 +174,13 @@ Compare two CSV exports (such as those produced by `files.csv`) by their `locati
 one file. Outputs are written to `data/compare_only_new.csv` (rows unique to the new CSV) and `data/compare_only_old.csv` (rows
 unique to the old CSV). When comparing, Google-native files and their Office exports are treated as the same item (for example,
 `/Client/File` with mime type `application/vnd.google-apps.document` matches `/Client/File.docx`).
+
+Configuration options in `compare` section:
+- `ignore_public_subdir`: If true, ignore the public_subdir folder itself (but not its children) in comparisons.
+- `normalize_file_names`: If true, normalize file/folder names by replacing forbidden characters with '_'.
+- `ignore_format_differences`: If true, ignore format mismatches (same file, different format).
+- `ignore_duplicate_suffixes`: If true, ignore duplicate suffixes like (1), (2), etc. in file names.
+- `ignore_folders`: List of folder names to ignore. Folders matching names in this list and all their children (files and subfolders) are ignored.
 
 Run the command:
 
