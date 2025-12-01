@@ -30,6 +30,10 @@ def build_planfix_config(config_data: Dict[str, Any]) -> PlanfixConfig:
             url=planfix_section["getClientTask"]["url"],
             token=planfix_section["getClientTask"]["token"],
         ),
+        update_contact=PlanfixEndpointConfig(
+            url=planfix_section["updateContact"]["url"],
+            token=planfix_section["updateContact"]["token"],
+        ),
         role=planfix_section["role"],
     )
 

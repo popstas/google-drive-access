@@ -62,6 +62,24 @@ class PlanfixClient:
         logger.debug("Client task lookup result for {}: {}", client_id, client_task)
         return client_task
 
+    def update_contact(self, contact_id: str, google_folder: str) -> Dict[str, Any]:
+        try:
+            contact_id_int = int(contact_id)
+        except (ValueError, TypeError):
+            raise ValueError(f"Invalid contact ID: {contact_id} (must be a number)")
+        payload = {"contactId": contact_id_int, "google_folder": google_folder}
+        logger.debug("Updating contact {} with google_folder={}", contact_id_int, google_folder)
+        response = requests.post(
+            self._config.update_contact.url,
+            headers=self._headers(self._config.update_contact.token),
+            json=payload,
+            timeout=60,
+        )
+        response.raise_for_status()
+        result = response.json()
+        logger.debug("Update contact result for {}: {}", contact_id_int, result)
+        return result
+
     @staticmethod
     def collect_assignee_ids(
         tasks: List[Dict[str, Any]], initial_assignee_ids: List[str]

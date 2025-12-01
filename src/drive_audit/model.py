@@ -14,6 +14,7 @@ class PlanfixConfig:
     get_child_tasks: PlanfixEndpointConfig
     get_manager: PlanfixEndpointConfig
     get_client_task: PlanfixEndpointConfig
+    update_contact: PlanfixEndpointConfig
     role: str
 
 
