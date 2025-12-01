@@ -187,8 +187,8 @@ def test_compare_files_by_location_writes_differences(tmp_path: Path):
     with outputs["old"].open(encoding="utf-8") as handle:
         old_diff_rows = list(csv.DictReader(handle))
 
-    assert new_diff_rows == [{"location": "ClientC/File3", "name": "File3"}]
-    assert old_diff_rows == [{"location": "ClientA/File1", "name": "File1"}]
+    assert new_diff_rows == [{"location": "ClientC/File3", "client_name": "", "mime_type": "", "modified": ""}]
+    assert old_diff_rows == [{"location": "ClientA/File1", "client_name": "", "mime_type": "", "modified": ""}]
 
 
 def test_compare_files_by_location_normalizes_google_and_office_formats(tmp_path: Path):
@@ -235,7 +235,7 @@ def test_compare_files_by_location_normalizes_google_and_office_formats(tmp_path
         old_diff_rows = list(csv.DictReader(handle))
 
     assert new_diff_rows == [
-        {"location": "/Only/New", "mimeType": "text/plain"}
+        {"location": "/Only/New", "client_name": "", "mime_type": "text/plain", "modified": ""}
     ]
     assert old_diff_rows == []
 

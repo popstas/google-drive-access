@@ -227,7 +227,8 @@ def test_ensure_public_subdir_delegates_to_permissions(tmp_path):
     cache = ListFolderChildrenCache(tmp_path / "cache")
     files_api = _FakeFilesCreate(
         [
-            {"files": []},
+            {"files": []},  # First list() call (exact match query)
+            {"files": []},  # Second list() call (fallback query)
         ]
     )
     service = _FakeService(files_api)
