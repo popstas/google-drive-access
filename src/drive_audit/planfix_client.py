@@ -24,7 +24,7 @@ class PlanfixClient:
             self._config.get_child_tasks.url,
             headers=self._headers(self._config.get_child_tasks.token),
             json=payload,
-            timeout=15,
+            timeout=60,
         )
         response.raise_for_status()
         data = response.json()
@@ -41,7 +41,7 @@ class PlanfixClient:
             self._config.get_manager.url,
             headers=self._headers(self._config.get_manager.token),
             json=payload,
-            timeout=15,
+            timeout=60,
         )
         response.raise_for_status()
         manager = response.json()
@@ -55,7 +55,7 @@ class PlanfixClient:
             self._config.get_client_task.url,
             headers=self._headers(self._config.get_client_task.token),
             json=payload,
-            timeout=15,
+            timeout=60,
         )
         response.raise_for_status()
         client_task = response.json()

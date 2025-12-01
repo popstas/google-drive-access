@@ -1,12 +1,15 @@
 import argparse
 import csv
+import re
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Sequence
+from unicodedata import normalize
 
 from loguru import logger
 
-from .google_client import get_service, move_file
+from .compare import compare_files_by_location
+from .google_client import get_service, move_file, get_file_permissions
 from .logger_config import configure_logger
 from .main import load_config
 from .model import DriveConfig
@@ -152,6 +155,119 @@ def move_files_from_csv(
     return moved_files
 
 
+
+
+def recheck_files_from_drive(
+    service,
+    drive_config: DriveConfig,
+    csv_file: Optional[Path] = None,
+    file_ids: Optional[List[str]] = None,
+    output_path: Path = Path("data/recheck_results.csv"),
+) -> None:
+    """
+    Recheck files from Google Drive by file_id or location from CSV.
+    Fetches current file metadata and writes to output CSV.
+    """
+    file_ids_to_check: List[str] = []
+
+    if file_ids:
+        file_ids_to_check.extend(file_ids)
+
+    if csv_file:
+        if not csv_file.exists():
+            raise FileNotFoundError(f"CSV file not found: {csv_file}")
+
+        with csv_file.open(encoding="utf-8-sig", newline="") as csv_handle:
+            reader = csv.DictReader(csv_handle)
+            if not reader.fieldnames:
+                raise ValueError(f"CSV file {csv_file} has no headers")
+
+            for row in reader:
+                file_id = (row.get("file_id") or "").strip()
+                if file_id:
+                    file_ids_to_check.append(file_id)
+
+    if not file_ids_to_check:
+        logger.warning("No file IDs to recheck")
+        return
+
+    logger.info("Rechecking {} files from Google Drive", len(file_ids_to_check))
+
+    files_resource = service.files()
+    recheck_results: List[Dict[str, Any]] = []
+
+    fields = "id,name,mimeType,parents,createdTime,modifiedTime,viewedByMeTime,owners,lastModifyingUser,trashed,starred,size,shortcutDetails"
+
+    for idx, file_id in enumerate(file_ids_to_check, 1):
+        try:
+            file_metadata = files_resource.get(
+                fileId=file_id,
+                fields=fields,
+                supportsAllDrives=True,
+            ).execute()
+
+            # Get permissions
+            try:
+                permissions = get_file_permissions(service, file_id)
+            except Exception as e:
+                logger.warning("Failed to get permissions for {}: {}", file_id, e)
+                permissions = []
+
+            result_row = {
+                "file_id": file_metadata.get("id", ""),
+                "name": file_metadata.get("name", ""),
+                "mime_type": file_metadata.get("mimeType", ""),
+                "parents": ",".join(file_metadata.get("parents", [])),
+                "created": file_metadata.get("createdTime", ""),
+                "modified": file_metadata.get("modifiedTime", ""),
+                "viewed": file_metadata.get("viewedByMeTime", ""),
+                "trashed": str(file_metadata.get("trashed", False)),
+                "starred": str(file_metadata.get("starred", False)),
+                "size_bytes": str(file_metadata.get("size", "")),
+                "owner_emails": ",".join(
+                    owner.get("emailAddress", "") for owner in file_metadata.get("owners", [])
+                ),
+                "last_modifying_user_email": (
+                    file_metadata.get("lastModifyingUser", {}).get("emailAddress", "")
+                ),
+                "permissions_count": str(len(permissions)),
+                "shortcut_target_id": (
+                    file_metadata.get("shortcutDetails", {}).get("targetId", "")
+                ),
+            }
+            recheck_results.append(result_row)
+
+            if idx % 10 == 0:
+                logger.debug("Rechecked {}/{} files", idx, len(file_ids_to_check))
+
+        except Exception as e:
+            logger.error("Failed to recheck file {}: {}", file_id, e)
+            recheck_results.append(
+                {
+                    "file_id": file_id,
+                    "error": str(e),
+                }
+            )
+
+    # Write results
+    if recheck_results:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        fieldnames = list(recheck_results[0].keys())
+        with output_path.open("w", newline="", encoding="utf-8") as csv_handle:
+            writer = csv.DictWriter(csv_handle, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in recheck_results:
+                writer.writerow(row)
+
+        logger.info(
+            "Wrote {} recheck results to {}",
+            len(recheck_results),
+            output_path,
+        )
+    else:
+        logger.warning("No results to write")
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Drive audit commands")
     parser.add_argument(
@@ -178,6 +294,31 @@ def parse_args() -> argparse.Namespace:
     )
     csv_parser.add_argument(
         "--dry-run", action="store_true", help="Show actions without moving files"
+    )
+
+    compare_parser = subparsers.add_parser(
+        "compare_files",
+        help="Compare two CSV exports by location and write the differences",
+    )
+    compare_parser.add_argument("csv_old", help="Path to the baseline CSV export")
+    compare_parser.add_argument("csv_new", help="Path to the new CSV export")
+
+    recheck_parser = subparsers.add_parser(
+        "recheck_files",
+        help="Recheck files from Google Drive by file_id or location from CSV",
+    )
+    recheck_parser.add_argument(
+        "--csv-file",
+        help="CSV file with file_id or location column to recheck",
+    )
+    recheck_parser.add_argument(
+        "--file-ids",
+        nargs="+",
+        help="List of file IDs to recheck directly",
+    )
+    recheck_parser.add_argument(
+        "--output",
+        help="Output CSV file path (default: data/recheck_results.csv)",
     )
 
     return parser.parse_args()
@@ -261,6 +402,56 @@ def main() -> None:
         )
         moved_files = move_files_from_csv(service, drive_config, csv_file, args.dry_run)
         logger.info("{} files processed", len(moved_files))
+    elif args.command == "compare_files":
+        compare_config = config_data.get("compare", {})
+        ignore_public_subdir = compare_config.get("ignore_public_subdir", False)
+        normalize_file_names = compare_config.get("normalize_file_names", False)
+        ignore_format_differences = compare_config.get("ignore_format_differences", False)
+        ignore_duplicate_suffixes = compare_config.get("ignore_duplicate_suffixes", False)
+        ignore_folders = compare_config.get("ignore_folders", [])
+        public_subdir = drive_config.public_subdir
+        
+        logger.info(
+            "Compare configuration: ignore_public_subdir={}, normalize_file_names={}, ignore_format_differences={}, ignore_duplicate_suffixes={}, ignore_folders={}",
+            ignore_public_subdir,
+            normalize_file_names,
+            ignore_format_differences,
+            ignore_duplicate_suffixes,
+            ignore_folders,
+        )
+        
+        result = compare_files_by_location(
+            Path(args.csv_old),
+            Path(args.csv_new),
+            ignore_public_subdir=ignore_public_subdir,
+            public_subdir=public_subdir,
+            normalize_file_names=normalize_file_names,
+            ignore_format_differences=ignore_format_differences,
+            ignore_duplicate_suffixes=ignore_duplicate_suffixes,
+            ignore_folders=ignore_folders if ignore_folders else None,
+        )
+        
+        # Output statistics
+        stats = result.get("stats", {})
+        logger.info("=" * 60)
+        logger.info("Comparison Statistics:")
+        logger.info("  Total rows in old CSV: {}", stats.get("total_rows_old", 0))
+        logger.info("  Total rows in new CSV: {}", stats.get("total_rows_new", 0))
+        logger.info("  Ignored public_subdir folders (old): {}", stats.get("ignored_public_subdirs_old", 0))
+        logger.info("  Ignored public_subdir folders (new): {}", stats.get("ignored_public_subdirs_new", 0))
+        logger.info("  Ignored folders and their children (old): {}", stats.get("ignored_folders_old", 0))
+        logger.info("  Ignored folders and their children (new): {}", stats.get("ignored_folders_new", 0))
+        logger.info("  New-only rows: {}", stats.get("new_only_rows", 0))
+        logger.info("  Old-only rows: {}", stats.get("old_only_rows", 0))
+        logger.info("=" * 60)
+    elif args.command == "recheck_files":
+        recheck_files_from_drive(
+            service,
+            drive_config,
+            csv_file=Path(args.csv_file) if args.csv_file else None,
+            file_ids=args.file_ids or [],
+            output_path=Path(args.output) if args.output else Path("data/recheck_results.csv"),
+        )
     else:
         raise ValueError(f"Unknown command: {args.command}")
 

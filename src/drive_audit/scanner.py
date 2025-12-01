@@ -1,5 +1,6 @@
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+from unicodedata import normalize
 
 from loguru import logger
 
@@ -15,6 +16,21 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
         return datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
     except ValueError:
         return None
+
+
+def normalize_unicode(text: str) -> str:
+    """
+    Normalize Unicode text to NFC (Canonical Composition) form.
+    
+    This ensures that characters like 'й' are always represented consistently,
+    whether they come as a single character (U+0439) or as decomposed
+    characters (U+0438 + U+0306).
+    
+    NFC is the standard form for most text processing and storage.
+    """
+    if not text:
+        return text
+    return normalize("NFC", text)
 
 
 def build_file_tree(
@@ -116,6 +132,9 @@ def build_file_tree(
         # We stopped BEFORE adding Root.
         # So path is reversed temp_chain.
         path_segments = list(reversed(temp_chain))
+        
+        # Normalize all path segments to ensure consistent Unicode representation
+        path_segments = [normalize_unicode(segment) for segment in path_segments]
 
         # Location string
         location = "/" + "/".join(path_segments)
@@ -125,7 +144,7 @@ def build_file_tree(
 
         # Client
         # First segment is client
-        client_name = path_segments[0] if path_segments else None
+        client_name = normalize_unicode(path_segments[0]) if path_segments else None
         client_id = None  # We'd need to track IDs in the chain to get this, skipping for now unless critical
 
         # Parse Permissions
@@ -254,7 +273,7 @@ def build_file_tree(
 
         file_info = FileInfo(
             id=file_id,
-            name=name,
+            name=normalize_unicode(name),
             type=(
                 "shortcut"
                 if is_shortcut

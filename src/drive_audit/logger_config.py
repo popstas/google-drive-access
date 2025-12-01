@@ -38,7 +38,7 @@ def configure_logger(
     if enable_console_logging:
         logger.add(
             sys.stderr,
-            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level} </level> | <level>{message}</level>",
             level=log_level,
             colorize=True,
         )
@@ -59,7 +59,7 @@ def configure_logger(
 
         logger.add(
             str(log_file_path),
-            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | {message}",
+            format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level} | {message}",
             level=log_level,
             rotation=rotation,
             retention=retention,

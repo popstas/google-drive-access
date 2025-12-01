@@ -23,6 +23,13 @@ scan:
 cache_timeouts:
   list_folder_children: 3600  # seconds
 
+compare:
+  ignore_public_subdir: false  # If true, ignore public_subdir folder itself, but not its children
+  normalize_file_names: false  # If true, normalize file/folder names by replacing forbidden characters with '_'
+  ignore_format_differences: false  # If true, ignore format mismatches in comparison (same file, different format)
+  ignore_duplicate_suffixes: false  # If true, ignore duplicate suffixes like (1), (2), etc. in file names
+  ignore_folders: []  # List of folder names to ignore (only folders with children are ignored)
+
 commands:
   move_files_to_public_folder:
     file_match:
