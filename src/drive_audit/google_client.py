@@ -33,6 +33,7 @@ __all__ = [
     "DriveConfig",
     "add_user_permission",
     "create_folder",
+    "delete_folder",
     "ensure_public_permission",
     "ensure_public_subdir",
     "find_child_folder",
@@ -117,3 +118,12 @@ def move_file(
 ) -> Dict[str, Any]:
     facade = _with_facade(service)
     return facade.files.move_file(file_id, new_parent_id, current_parents, drive_id)
+
+
+def delete_folder(
+    service,
+    folder_id: str,
+    drive_id: str = "",
+) -> None:
+    facade = _with_facade(service)
+    return facade.files.delete_folder(folder_id, drive_id)

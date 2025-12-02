@@ -14,11 +14,11 @@ from .drive_permissions import DrivePermissions
 def normalize_unicode(text: str) -> str:
     """
     Normalize Unicode text to NFC (Canonical Composition) form.
-    
+
     This ensures that characters like 'й' are always represented consistently,
     whether they come as a single character (U+0439) or as decomposed
     characters (U+0438 + U+0306).
-    
+
     NFC is the standard form for most text processing and storage.
     """
     if not text:
@@ -92,7 +92,7 @@ class DriveFiles:
     ) -> Optional[Dict[str, Any]]:
         # Normalize the search name to ensure consistent Unicode matching
         normalized_name = normalize_unicode(name)
-        
+
         # First, try exact match with normalized name
         query = (
             f"'{parent_id}' in parents and "
@@ -110,7 +110,7 @@ class DriveFiles:
             files = response.get("files", [])
             if files:
                 return files[0]
-            
+
             # Fallback: if exact match fails, fetch all folders and compare normalized names
             # This handles cases where folders exist with different Unicode normalization
             query_fallback = (
@@ -123,15 +123,17 @@ class DriveFiles:
                 "q": query_fallback,
                 "fields": "files(id, name)",
             }
-            
-            response_fallback = self._service.files().list(**request_kwargs_fallback).execute()
+
+            response_fallback = (
+                self._service.files().list(**request_kwargs_fallback).execute()
+            )
             all_folders = response_fallback.get("files", [])
-            
+
             for folder in all_folders:
                 folder_name = folder.get("name", "")
                 if normalize_unicode(folder_name) == normalized_name:
                     return folder
-            
+
             return None
         except HttpError as error:
             logger.error(
@@ -268,3 +270,25 @@ class DriveFiles:
             self._cache.reset(parent_id, drive_id)
 
         return updated
+
+    def delete_folder(
+        self,
+        folder_id: str,
+        drive_id: str = "",
+    ) -> None:
+        """
+        Permanently delete a folder from Google Drive.
+
+        Args:
+            folder_id: The ID of the folder to delete
+            drive_id: The ID of the shared drive (if applicable)
+        """
+        try:
+            self._service.files().delete(
+                fileId=folder_id,
+                supportsAllDrives=True,
+            ).execute()
+            logger.info("Deleted folder {}", folder_id)
+        except HttpError as error:
+            logger.error("Failed to delete folder {}: {}", folder_id, error)
+            raise
