@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Set
+from time import time
+from typing import Any, Dict, List, Set, Tuple
 
 import requests
 from loguru import logger
@@ -9,6 +10,7 @@ from .model import PlanfixConfig
 class PlanfixClient:
     def __init__(self, config: PlanfixConfig):
         self._config = config
+        self._manager_cache: Dict[str, Tuple[Dict[str, Any], float]] = {}
 
     @staticmethod
     def _headers(token: str) -> Dict[str, str]:
@@ -35,6 +37,20 @@ class PlanfixClient:
         return tasks
 
     def get_manager(self, assignee_id: str) -> Dict[str, Any]:
+        # Check cache
+        if assignee_id in self._manager_cache:
+            cached_manager, cached_time = self._manager_cache[assignee_id]
+            if time() - cached_time < 86400:  # 24 hours
+                logger.debug(
+                    "Using cached manager for assignee_id={}", assignee_id
+                )
+                return cached_manager
+            else:
+                logger.debug(
+                    "Cache expired for assignee_id={}, fetching fresh data",
+                    assignee_id,
+                )
+        
         payload = {"id": int(assignee_id)}
         logger.debug("Fetching manager for assignee_id={}", assignee_id)
         response = requests.post(
@@ -46,6 +62,10 @@ class PlanfixClient:
         response.raise_for_status()
         manager = response.json()
         logger.debug("Manager lookup result for {}: {}", assignee_id, manager)
+        
+        # Store in cache
+        self._manager_cache[assignee_id] = (manager, time())
+        
         return manager
 
     def get_client_task(self, client_id: int) -> Dict[str, Any]:
