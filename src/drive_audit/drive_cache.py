@@ -9,6 +9,8 @@ from loguru import logger
 DEFAULT_CACHE_ROOT = Path("data/cache")
 DEFAULT_LIST_CHILDREN_CACHE_DIR = DEFAULT_CACHE_ROOT / "list_folder_children"
 DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT = 3600
+DEFAULT_FOLDER_METADATA_CACHE_DIR = DEFAULT_CACHE_ROOT / "folder_metadata"
+DEFAULT_FOLDER_METADATA_CACHE_TIMEOUT = 3600
 
 
 class ListFolderChildrenCache:
@@ -167,4 +169,137 @@ def reset_list_folder_children_cache(
     list_children_cache.reset(folder_id, drive_id, page_size)
 
 
+class FolderMetadataCache:
+    def __init__(self, cache_dir: Path = DEFAULT_FOLDER_METADATA_CACHE_DIR):
+        self._cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._cache_dir = cache_dir
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+
+    def set_cache_dir(self, cache_dir: Path) -> None:
+        self._cache_dir = cache_dir
+        self._cache_dir.mkdir(parents=True, exist_ok=True)
+        self._cache.clear()
+
+    def reset(self, folder_id: Optional[str] = None) -> None:
+        if folder_id is None:
+            self._cache.clear()
+            self._clear_cache_dir()
+            return
+
+        if folder_id in self._cache:
+            self._cache.pop(folder_id, None)
+            self._remove_disk_cache(folder_id)
+
+    def get_cached_metadata(
+        self, folder_id: str, cache_timeout_seconds: int
+    ) -> Optional[Dict[str, Any]]:
+        cached_value = self._cache.get(folder_id)
+        if not cached_value:
+            cached_value = self._load_disk_cache(folder_id, cache_timeout_seconds)
+            if cached_value:
+                self._cache[folder_id] = cached_value
+
+        if cache_timeout_seconds <= 0:
+            if cached_value:
+                self._cache.pop(folder_id, None)
+                self._remove_disk_cache(folder_id)
+            return None
+
+        if not cached_value:
+            return None
+
+        cached_at, cached_metadata = cached_value
+
+        if time.time() - cached_at < cache_timeout_seconds:
+            return dict(cached_metadata)
+
+        self._cache.pop(folder_id, None)
+        self._remove_disk_cache(folder_id)
+        return None
+
+    def store_cached_metadata(
+        self,
+        folder_id: str,
+        metadata: Dict[str, Any],
+        cache_timeout_seconds: int,
+    ) -> None:
+        if cache_timeout_seconds <= 0:
+            return
+
+        cached_value = (time.time(), dict(metadata))
+        self._cache[folder_id] = cached_value
+        self._write_disk_cache(folder_id, cached_value)
+
+    def _get_cache_file_path(self, folder_id: str) -> Path:
+        safe_folder_id = folder_id.replace(os.sep, "_")
+        return self._cache_dir / f"{safe_folder_id}.json"
+
+    def _load_disk_cache(
+        self, folder_id: str, cache_timeout_seconds: int
+    ) -> Optional[Tuple[float, Dict[str, Any]]]:
+        cache_file = self._get_cache_file_path(folder_id)
+        if not cache_file.exists():
+            return None
+
+        try:
+            with cache_file.open(encoding="utf-8") as cache_handle:
+                payload = json.load(cache_handle)
+        except (OSError, json.JSONDecodeError):
+            cache_file.unlink(missing_ok=True)
+            return None
+
+        cached_at = payload.get("cached_at")
+        cached_metadata = payload.get("metadata")
+        if not isinstance(cached_at, (int, float)) or not isinstance(
+            cached_metadata, dict
+        ):
+            cache_file.unlink(missing_ok=True)
+            return None
+
+        if (
+            cache_timeout_seconds <= 0
+            or time.time() - cached_at >= cache_timeout_seconds
+        ):
+            cache_file.unlink(missing_ok=True)
+            return None
+
+        return cached_at, cached_metadata
+
+    def _write_disk_cache(
+        self,
+        folder_id: str,
+        cached_value: Tuple[float, Dict[str, Any]],
+    ) -> None:
+        cache_file = self._get_cache_file_path(folder_id)
+        cache_file.parent.mkdir(parents=True, exist_ok=True)
+        cached_at, cached_metadata = cached_value
+        try:
+            with cache_file.open("w", encoding="utf-8") as cache_handle:
+                json.dump(
+                    {"cached_at": cached_at, "metadata": cached_metadata}, cache_handle
+                )
+        except OSError:
+            logger.warning("Failed to persist cache file {}", cache_file)
+
+    def _remove_disk_cache(self, folder_id: str) -> None:
+        cache_file = self._get_cache_file_path(folder_id)
+        cache_file.unlink(missing_ok=True)
+
+    def _clear_cache_dir(self) -> None:
+        if not self._cache_dir.exists():
+            return
+
+        for cache_file in self._cache_dir.glob("*.json"):
+            cache_file.unlink(missing_ok=True)
+
+
+def set_folder_metadata_cache_dir(cache_dir: Path) -> None:
+    folder_metadata_cache.set_cache_dir(cache_dir)
+
+
+def reset_folder_metadata_cache(folder_id: Optional[str] = None) -> None:
+    folder_metadata_cache.reset(folder_id)
+
+
 list_children_cache = ListFolderChildrenCache()
+folder_metadata_cache = FolderMetadataCache()

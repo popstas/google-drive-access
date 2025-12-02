@@ -6,6 +6,7 @@ import pytest
 
 from drive_audit.commands import (
     compare_files_by_location,
+    drive_links_info,
     move_files_from_csv,
     move_files_to_public_folder,
 )
@@ -698,3 +699,164 @@ def test_move_files_from_csv_moves_listed_files(tmp_path, monkeypatch):
         }
     ]
     assert moved == [("file-1", "destination-folder", ["old-parent"])]
+
+
+def test_drive_links_info_retrieves_folder_metadata(tmp_path, monkeypatch):
+    """Test that drive_links_info correctly retrieves folder metadata from URLs and preserves original columns."""
+    # Create test CSV with folder URLs
+    csv_file = tmp_path / "test_contacts.csv"
+    csv_file.write_text(
+        "Name,Contact ID,Folder URL\n"
+        "Client A,12345,https://drive.google.com/drive/folders/folder123\n"
+        "Client B,67890,https://drive.google.com/drive/folders/folder456\n"
+        "Client C,11111,\n",
+        encoding="utf-8",
+    )
+    
+    output_file = tmp_path / "output.csv"
+    
+    # Mock service.files().get() calls
+    class FakeFiles:
+        def get(self, fileId, fields, supportsAllDrives):
+            if fileId == "folder123":
+                return FakeExecute({
+                    "id": "folder123",
+                    "name": "Client A Folder",
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents": ["parent1"],
+                    "createdTime": "2025-01-01T00:00:00.000Z",
+                    "modifiedTime": "2025-01-02T00:00:00.000Z",
+                    "owners": [{"emailAddress": "owner@example.com"}],
+                    "lastModifyingUser": {"emailAddress": "user@example.com"},
+                    "webViewLink": "https://drive.google.com/drive/folders/folder123",
+                })
+            elif fileId == "folder456":
+                return FakeExecute({
+                    "id": "folder456",
+                    "name": "Client B Folder",
+                    "mimeType": "application/vnd.google-apps.folder",
+                    "parents": ["parent2"],
+                    "createdTime": "2025-01-03T00:00:00.000Z",
+                    "modifiedTime": "2025-01-04T00:00:00.000Z",
+                    "owners": [{"emailAddress": "owner2@example.com"}],
+                    "lastModifyingUser": {"emailAddress": "user2@example.com"},
+                    "webViewLink": "https://drive.google.com/drive/folders/folder456",
+                })
+            raise Exception(f"Unknown folder ID: {fileId}")
+    
+    class FakeExecute:
+        def __init__(self, data):
+            self.data = data
+        
+        def execute(self):
+            return self.data
+    
+    class FakeService:
+        def files(self):
+            return FakeFiles()
+    
+    # Mock get_file_permissions
+    def fake_get_permissions(service, file_id):
+        return [{"type": "user", "role": "reader"}]
+    
+    monkeypatch.setattr("drive_audit.commands.get_file_permissions", fake_get_permissions)
+    
+    # Run the command with cache disabled for test
+    drive_links_info(
+        FakeService(),
+        csv_file=csv_file,
+        column="Folder URL",
+        output_path=output_file,
+        cache_timeout_seconds=0,  # Disable cache for test
+    )
+    
+    # Verify output
+    assert output_file.exists()
+    
+    with output_file.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+    
+    assert len(rows) == 3
+    
+    # Check first row - has Drive metadata
+    assert rows[0]["source_row"] == "2"
+    assert rows[0]["Name"] == "Client A"
+    assert rows[0]["Contact ID"] == "12345"
+    assert rows[0]["folder_id"] == "folder123"
+    assert rows[0]["folder_name"] == "Client A Folder"
+    assert rows[0]["owner_emails"] == "owner@example.com"
+    assert rows[0]["permissions_count"] == "1"
+    
+    # Check second row - has Drive metadata
+    assert rows[1]["source_row"] == "3"
+    assert rows[1]["Name"] == "Client B"
+    assert rows[1]["Contact ID"] == "67890"
+    assert rows[1]["folder_id"] == "folder456"
+    assert rows[1]["folder_name"] == "Client B Folder"
+    assert rows[1]["owner_emails"] == "owner2@example.com"
+    assert rows[1]["permissions_count"] == "1"
+    
+    # Check third row - empty URL, should have original columns but empty Drive metadata
+    assert rows[2]["source_row"] == "4"
+    assert rows[2]["Name"] == "Client C"
+    assert rows[2]["Contact ID"] == "11111"
+    assert rows[2]["folder_id"] == ""
+    assert rows[2]["folder_name"] == ""
+
+
+def test_drive_links_info_handles_errors(tmp_path, monkeypatch):
+    """Test that drive_links_info handles errors gracefully and preserves original columns."""
+    # Create test CSV with invalid URLs
+    csv_file = tmp_path / "test_contacts.csv"
+    csv_file.write_text(
+        "Name,Contact ID,Folder URL\n"
+        "Client A,12345,not-a-valid-url\n"
+        "Client B,67890,https://drive.google.com/drive/folders/error-folder\n",
+        encoding="utf-8",
+    )
+    
+    output_file = tmp_path / "output.csv"
+    
+    # Mock service.files().get() to raise error
+    class FakeFiles:
+        def get(self, fileId, fields, supportsAllDrives):
+            raise Exception("API Error")
+    
+    class FakeService:
+        def files(self):
+            return FakeFiles()
+    
+    def fake_get_permissions(service, file_id):
+        return []
+    
+    monkeypatch.setattr("drive_audit.commands.get_file_permissions", fake_get_permissions)
+    
+    # Run the command - should not raise exception
+    drive_links_info(
+        FakeService(),
+        csv_file=csv_file,
+        column="Folder URL",
+        output_path=output_file,
+        cache_timeout_seconds=0,  # Disable cache for test
+    )
+    
+    # Verify output exists and contains error rows
+    assert output_file.exists()
+    
+    with output_file.open(encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        rows = list(reader)
+    
+    assert len(rows) == 2
+    
+    # Both rows should have errors and preserve original columns
+    assert "error" in rows[0]
+    assert rows[0]["Name"] == "Client A"
+    assert rows[0]["Contact ID"] == "12345"
+    assert rows[0]["folder_id"] == ""
+    
+    assert "error" in rows[1]
+    assert rows[1]["Name"] == "Client B"
+    assert rows[1]["Contact ID"] == "67890"
+    assert rows[1]["folder_id"] == ""

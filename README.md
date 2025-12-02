@@ -193,6 +193,42 @@ Run the command:
 python -m src.drive_audit.commands --config data/config.yml compare_files data/files_old.csv data/files_new.csv
 ```
 
+### drive_links_info
+
+Retrieve folder information from Google Drive for URLs listed in a CSV file. This command reads a CSV file with Google Drive folder URLs, extracts the folder IDs, retrieves metadata from the Google Drive API, and saves the results to a new CSV file.
+
+**Caching**: Folder metadata is cached for 3600 seconds (1 hour) by default to improve performance when re-running the command. Cache files are stored in `data/cache/folder_metadata/`.
+
+**All original CSV columns are preserved in the output**, along with the following new columns added:
+- `source_row`: Row number from the input CSV (added as the first column)
+- `folder_id`: Extracted Google Drive folder ID
+- `folder_name`: Name of the folder from Google Drive
+- `mime_type`: MIME type of the folder
+- `parents`: Parent folder IDs
+- `created`: Creation timestamp
+- `modified`: Last modification timestamp
+- `viewed`: Last viewed timestamp
+- `size_bytes`: Size in bytes (if applicable)
+- `owner_emails`: Comma-separated list of owner email addresses
+- `last_modifying_user_email`: Email of the last user who modified the folder
+- `permissions_count`: Number of permissions on the folder
+- `web_view_link`: Web link to view the folder
+- `error`: Error message (only included if errors occurred)
+
+Note: Rows with empty URLs are still included in the output with empty Drive metadata fields.
+
+Run the command:
+
+```bash
+python -m drive_audit.commands --config data/config.yml drive_links_info \
+  --csv-file data/contacts-with-google-folder.csv \
+  --column "Ссылка на Google Drive папку клиента" \
+  --output data/drive_links_info.csv \
+  --cache-timeout 3600
+```
+
+All arguments are optional and have default values as shown above. Set `--cache-timeout 0` to disable caching.
+
 ## Testing and coverage
 
 Install test dependencies with the optional `test` extras and run pytest with coverage enabled:
