@@ -1413,15 +1413,17 @@ def main() -> None:
             "ignore_duplicate_suffixes", False
         )
         ignore_folders = compare_config.get("ignore_folders", [])
+        ignore_empty_folders = compare_config.get("ignore_empty_folders", False)
         public_subdir = drive_config.public_subdir
 
         logger.info(
-            "Compare configuration: ignore_public_subdir={}, normalize_file_names={}, ignore_format_differences={}, ignore_duplicate_suffixes={}, ignore_folders={}",
+            "Compare configuration: ignore_public_subdir={}, normalize_file_names={}, ignore_format_differences={}, ignore_duplicate_suffixes={}, ignore_folders={}, ignore_empty_folders={}",
             ignore_public_subdir,
             normalize_file_names,
             ignore_format_differences,
             ignore_duplicate_suffixes,
             ignore_folders,
+            ignore_empty_folders,
         )
 
         result = compare_files_by_location(
@@ -1433,6 +1435,7 @@ def main() -> None:
             ignore_format_differences=ignore_format_differences,
             ignore_duplicate_suffixes=ignore_duplicate_suffixes,
             ignore_folders=ignore_folders if ignore_folders else None,
+            ignore_empty_folders=ignore_empty_folders,
         )
 
         # Output statistics
@@ -1456,6 +1459,14 @@ def main() -> None:
         logger.info(
             "  Ignored folders and their children (new): {}",
             stats.get("ignored_folders_new", 0),
+        )
+        logger.info(
+            "  Ignored empty folders (old): {}",
+            stats.get("ignored_empty_folders_old", 0),
+        )
+        logger.info(
+            "  Ignored empty folders (new): {}",
+            stats.get("ignored_empty_folders_new", 0),
         )
         logger.info("  New-only rows: {}", stats.get("new_only_rows", 0))
         logger.info("  Old-only rows: {}", stats.get("old_only_rows", 0))

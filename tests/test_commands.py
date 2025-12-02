@@ -240,6 +240,95 @@ def test_compare_files_by_location_normalizes_google_and_office_formats(tmp_path
     assert old_diff_rows == []
 
 
+def test_compare_files_by_location_ignores_empty_folders(tmp_path: Path):
+    csv_old = tmp_path / "old.csv"
+    csv_new = tmp_path / "new.csv"
+
+    # Old CSV: has an empty folder and a folder with files
+    old_rows = [
+        {
+            "location": "/ClientA",
+            "type": "folder",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+        {
+            "location": "/ClientA/File1.txt",
+            "type": "file",
+            "mimeType": "text/plain",
+        },
+        {
+            "location": "/ClientB",
+            "type": "folder",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+        {
+            "location": "/ClientC",
+            "type": "folder",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+    ]
+
+    # New CSV: same structure but ClientB folder is removed
+    new_rows = [
+        {
+            "location": "/ClientA",
+            "type": "folder",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+        {
+            "location": "/ClientA/File1.txt",
+            "type": "file",
+            "mimeType": "text/plain",
+        },
+        {
+            "location": "/ClientC",
+            "type": "folder",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+    ]
+
+    with csv_old.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["location", "type", "mimeType"])
+        writer.writeheader()
+        writer.writerows(old_rows)
+
+    with csv_new.open("w", newline="", encoding="utf-8") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["location", "type", "mimeType"])
+        writer.writeheader()
+        writer.writerows(new_rows)
+
+    # Test without ignore_empty_folders: empty folders should appear in differences
+    outputs_without = compare_files_by_location(
+        csv_old, csv_new, ignore_empty_folders=False
+    )
+
+    with outputs_without["old"].open(encoding="utf-8") as handle:
+        old_diff_without = list(csv.DictReader(handle))
+
+    # ClientB (empty folder) should appear in old-only differences
+    old_locations_without = {row["location"] for row in old_diff_without}
+    assert "/ClientB" in old_locations_without
+
+    # Test with ignore_empty_folders: empty folders should be ignored
+    outputs_with = compare_files_by_location(
+        csv_old, csv_new, ignore_empty_folders=True
+    )
+
+    with outputs_with["old"].open(encoding="utf-8") as handle:
+        old_diff_with = list(csv.DictReader(handle))
+    with outputs_with["new"].open(encoding="utf-8") as handle:
+        new_diff_with = list(csv.DictReader(handle))
+
+    # ClientB (empty folder) should NOT appear in old-only differences
+    old_locations_with = {row["location"] for row in old_diff_with}
+    assert "/ClientB" not in old_locations_with
+
+    # Verify stats show ignored empty folders
+    stats = outputs_with["stats"]
+    assert stats["ignored_empty_folders_old"] > 0
+    assert stats["ignored_empty_folders_new"] >= 0
+
+
 def test_move_files_to_public_folder_accepts_multiple_patterns(monkeypatch):
     drive_config = build_drive_config()
 

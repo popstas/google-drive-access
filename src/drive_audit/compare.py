@@ -315,6 +315,51 @@ def should_ignore_public_subdir_row(
     return False
 
 
+def is_empty_folder(
+    folder_row: Dict[str, str],
+    all_rows: List[Dict[str, str]],
+) -> bool:
+    """
+    Check if a folder is empty (contains no files, only folders or nothing).
+    
+    A folder is considered empty if:
+    - It's a folder (not a file)
+    - No files (type="file") exist with a location that starts with the folder's location
+    
+    Args:
+        folder_row: CSV row representing a folder with location, type, and mime_type fields
+        all_rows: All CSV rows to check for files inside the folder
+        
+    Returns:
+        True if the folder is empty (contains no files), False otherwise
+    """
+    location = (folder_row.get("location") or "").strip()
+    if not location:
+        return False
+    
+    # Normalize location for consistent comparison
+    folder_location = normalize_unicode(location.rstrip("/"))
+    
+    # Check if any file (not folder) exists with location starting with folder_location + "/"
+    for row in all_rows:
+        row_location = normalize_unicode((row.get("location") or "").strip())
+        if not row_location:
+            continue
+        
+        # Check if this row is a file (not a folder)
+        mime_type = (row.get("mimeType") or row.get("mime_type") or "").strip()
+        file_type = (row.get("type") or "").strip().lower()
+        is_file = file_type == "file" and "folder" not in mime_type.lower()
+        
+        if is_file:
+            # Check if this file is inside the folder
+            # File location should start with folder_location + "/"
+            if row_location.startswith(folder_location + "/"):
+                return False  # Folder contains at least one file, not empty
+    
+    return True  # No files found in this folder
+
+
 def should_ignore_folder_row(
     row: Dict[str, str],
     all_rows: List[Dict[str, str]],
@@ -436,6 +481,7 @@ def compare_files_by_location(
     ignore_format_differences: bool = False,
     ignore_duplicate_suffixes: bool = False,
     ignore_folders: Optional[List[str]] = None,
+    ignore_empty_folders: bool = False,
 ) -> Dict[str, Any]:
     old_rows, old_fields = read_csv_rows(csv_old)
     new_rows, new_fields = read_csv_rows(csv_new)
@@ -448,6 +494,8 @@ def compare_files_by_location(
         "ignored_public_subdirs_new": 0,
         "ignored_folders_old": 0,
         "ignored_folders_new": 0,
+        "ignored_empty_folders_old": 0,
+        "ignored_empty_folders_new": 0,
         "total_rows_old": len(old_rows),
         "total_rows_new": len(new_rows),
     }
@@ -540,6 +588,62 @@ def compare_files_by_location(
             stats["ignored_folders_old"],
             stats["ignored_folders_new"],
             ignore_folders,
+        )
+
+    # Filter out empty folders if configured
+    if ignore_empty_folders:
+        # Filter out empty folders from old_rows (check against old_rows only)
+        ignored_empty_old = [
+            row
+            for row in old_rows
+            if (
+                # Check if it's a folder
+                ("folder" in (row.get("mimeType") or row.get("mime_type") or "").lower() or
+                 (row.get("type") or "").strip().lower() == "folder")
+            ) and is_empty_folder(row, old_rows)
+        ]
+        
+        # Filter out empty folders from new_rows (check against new_rows only)
+        ignored_empty_new = [
+            row
+            for row in new_rows
+            if (
+                # Check if it's a folder
+                ("folder" in (row.get("mimeType") or row.get("mime_type") or "").lower() or
+                 (row.get("type") or "").strip().lower() == "folder")
+            ) and is_empty_folder(row, new_rows)
+        ]
+        
+        stats["ignored_empty_folders_old"] = len(ignored_empty_old)
+        stats["ignored_empty_folders_new"] = len(ignored_empty_new)
+        
+        # Build set of empty folder locations for efficient filtering
+        empty_folder_locations_old = {
+            normalize_unicode((row.get("location") or "").strip().rstrip("/"))
+            for row in ignored_empty_old
+        }
+        empty_folder_locations_new = {
+            normalize_unicode((row.get("location") or "").strip().rstrip("/"))
+            for row in ignored_empty_new
+        }
+        
+        # Filter out empty folders
+        old_rows = [
+            row
+            for row in old_rows
+            if normalize_unicode((row.get("location") or "").strip().rstrip("/")) not in empty_folder_locations_old
+        ]
+        new_rows = [
+            row
+            for row in new_rows
+            if normalize_unicode((row.get("location") or "").strip().rstrip("/")) not in empty_folder_locations_new
+        ]
+        
+        logger.info(
+            "Filtered out empty folders: {} from old CSV, {} from new CSV (ignore_empty_folders: {})",
+            stats["ignored_empty_folders_old"],
+            stats["ignored_empty_folders_new"],
+            ignore_empty_folders,
         )
 
     # Lazy import to avoid circular import
