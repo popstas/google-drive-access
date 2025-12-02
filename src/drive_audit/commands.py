@@ -394,6 +394,35 @@ def _ensure_folder_structure(
     return current_folder_id
 
 
+def _folder_contains_files_recursively(
+    client_id: str,
+    all_rows: List[Dict[str, Any]],
+) -> bool:
+    """
+    Check if a client folder contains any files recursively (not just folders) using CSV lookup.
+    Returns True if any file (non-folder) is found, False if only folders exist.
+    
+    Args:
+        client_id: The file_id of the client folder (depth=1 folder)
+        all_rows: All rows from the CSV file
+    """
+    # Check all rows in CSV where client_id matches
+    for row in all_rows:
+        row_client_id = row.get("client_id", "").strip()
+        row_type = row.get("type", "").strip().lower()
+        
+        # Skip if client_id doesn't match
+        if row_client_id != client_id:
+            continue
+        
+        # If it's a file (not a folder), we found a file
+        if row_type == "file":
+            return True
+    
+    # No files found for this client folder
+    return False
+
+
 def merge_client_folders(
     service,
     drive_config: DriveConfig,
@@ -819,6 +848,160 @@ def merge_client_folders(
         logger.info("No operations to write")
 
 
+def delete_empty_folders(
+    service,
+    drive_config: DriveConfig,
+    csv_file: Path = Path("data/files.csv"),
+    dry_run: bool = False,
+) -> None:
+    """
+    Delete client folders (depth=1) that contain only folders recursively (no files).
+
+    Args:
+        service: Google Drive service object
+        drive_config: Drive configuration
+        csv_file: Path to CSV file with full file structure (default: data/files.csv)
+        dry_run: If True, only log actions without executing
+    """
+    if not csv_file.exists():
+        raise FileNotFoundError(f"CSV file not found: {csv_file}")
+
+    logger.info("Reading CSV file from {}", csv_file)
+
+    # Read all rows from CSV
+    all_rows: List[Dict[str, Any]] = []
+    with csv_file.open(encoding="utf-8-sig", newline="") as csv_handle:
+        reader = csv.DictReader(csv_handle)
+        if not reader.fieldnames:
+            raise ValueError(f"CSV file {csv_file} has no headers")
+
+        for row in reader:
+            all_rows.append(row)
+
+    logger.info("Read {} rows from CSV", len(all_rows))
+
+    # Filter client folders at depth=1
+    depth_1_folders = [
+        row
+        for row in all_rows
+        if row.get("type") == "folder" and row.get("depth") == "1"
+    ]
+
+    logger.info("Found {} client folders at depth=1", len(depth_1_folders))
+
+    if not depth_1_folders:
+        logger.info("No client folders found")
+        return
+
+    empty_folders: List[Dict[str, Any]] = []
+    folders_with_files: List[Dict[str, Any]] = []
+    error_folders: List[Dict[str, Any]] = []
+
+    # Check each client folder
+    for folder in depth_1_folders:
+        folder_id = folder.get("file_id", "").strip()
+        folder_name = folder.get("name", "").strip()
+        folder_location = folder.get("location", "").strip()
+
+        if not folder_id:
+            logger.warning(
+                "Skipping folder without file_id: {}",
+                folder_name or folder_location,
+            )
+            continue
+
+        logger.info(
+            "Checking folder {} ({})",
+            folder_name,
+            folder_id,
+        )
+
+        try:
+            # Check if folder contains files recursively using CSV
+            # For depth=1 folders, folder_id is the client_id
+            contains_files = _folder_contains_files_recursively(
+                folder_id,
+                all_rows,
+            )
+
+            if contains_files:
+                logger.debug(
+                    "  Folder {} ({}) contains files; skipping",
+                    folder_name,
+                    folder_id,
+                )
+                folders_with_files.append(folder)
+            else:
+                logger.info(
+                    "  Folder {} ({}) contains only folders; will be deleted",
+                    folder_name,
+                    folder_id,
+                )
+                empty_folders.append(folder)
+        except Exception as e:
+            logger.error(
+                "  Failed to check folder {} ({}): {}",
+                folder_name,
+                folder_id,
+                e,
+            )
+            error_folders.append(folder)
+
+    logger.info("=" * 60)
+    logger.info("Summary:")
+    logger.info("  Total client folders checked: {}", len(depth_1_folders))
+    logger.info("  Folders with files: {}", len(folders_with_files))
+    logger.info("  Empty folders (only folders): {}", len(empty_folders))
+    logger.info("  Errors: {}", len(error_folders))
+    logger.info("=" * 60)
+
+    if not empty_folders:
+        logger.info("No empty folders to delete")
+        return
+
+    # Delete empty folders
+    deleted_count = 0
+    failed_count = 0
+
+    for folder in empty_folders:
+        folder_id = folder.get("file_id", "").strip()
+        folder_name = folder.get("name", "").strip()
+
+        if dry_run:
+            logger.info(
+                "[dry-run] Would delete empty folder {} ({})",
+                folder_name,
+                folder_id,
+            )
+            deleted_count += 1
+        else:
+            try:
+                delete_folder(service, folder_id, drive_config.drive_id)
+                logger.info(
+                    "Deleted empty folder {} ({})",
+                    folder_name,
+                    folder_id,
+                )
+                deleted_count += 1
+            except Exception as e:
+                logger.error(
+                    "Failed to delete folder {} ({}): {}",
+                    folder_name,
+                    folder_id,
+                    e,
+                )
+                failed_count += 1
+
+    logger.info("=" * 60)
+    logger.info("Deletion results:")
+    if dry_run:
+        logger.info("  [dry-run] Would delete: {} folders", deleted_count)
+    else:
+        logger.info("  Deleted: {} folders", deleted_count)
+        logger.info("  Failed: {} folders", failed_count)
+    logger.info("=" * 60)
+
+
 def migrate_contact_folders(
     service,
     drive_config: DriveConfig,
@@ -1120,6 +1303,21 @@ def parse_args() -> argparse.Namespace:
         help="Show actions without executing",
     )
 
+    delete_empty_parser = subparsers.add_parser(
+        "delete_empty_folders",
+        help="Delete client folders at depth=1 that contain only folders recursively (no files)",
+    )
+    delete_empty_parser.add_argument(
+        "--csv-file",
+        default="data/files.csv",
+        help="Path to CSV file with full file structure (default: data/files.csv)",
+    )
+    delete_empty_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show actions without executing",
+    )
+
     return parser.parse_args()
 
 
@@ -1140,6 +1338,7 @@ def main() -> None:
         "move_files_csv": "move_files_csv.log",
         "migrate_contact_folders": "migrate_contact_folders.log",
         "merge_client_folders": "merge_client_folders.log",
+        "delete_empty_folders": "delete_empty_folders.log",
     }
     log_file_name = command_log_files.get(args.command, f"{args.command}.log")
     log_file_path = Path("data") / log_file_name
@@ -1284,6 +1483,13 @@ def main() -> None:
         )
     elif args.command == "merge_client_folders":
         merge_client_folders(
+            service,
+            drive_config,
+            csv_file=Path(args.csv_file),
+            dry_run=args.dry_run,
+        )
+    elif args.command == "delete_empty_folders":
+        delete_empty_folders(
             service,
             drive_config,
             csv_file=Path(args.csv_file),

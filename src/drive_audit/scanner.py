@@ -63,6 +63,10 @@ def build_file_tree(
         path_segments = []
         current_id = file_id
         valid_path = True
+        # Get parent_id from file_data (first parent)
+        parents_list = file_data.get("parents", [])
+        parent_id = parents_list[0] if parents_list else None
+        client_id = None
 
         # Special case: if root_folder_id equals drive_id, we're scanning the entire drive
         # In Shared Drives, files don't have the drive_id as a parent - they have folder IDs
@@ -70,18 +74,22 @@ def build_file_tree(
         if config.root_folder_id == config.drive_id:
             # Scan everything in the drive - no filtering needed
             temp_chain = []
+            temp_chain_ids = []
             curr = file_data
+            curr_id = file_id
             while True:
                 temp_chain.append(curr.get("name"))
+                temp_chain_ids.append(curr_id)
                 parents = curr.get("parents", [])
                 if not parents:
                     # Reached a root or orphan - this is fine for drive-wide scan
                     break
-                parent_id = parents[0]
-                if parent_id not in file_map:
+                next_parent_id = parents[0]
+                if next_parent_id not in file_map:
                     # Parent not in our list - stop here
                     break
-                curr = file_map[parent_id]
+                curr = file_map[next_parent_id]
+                curr_id = next_parent_id
         else:
             # We need to traverse up to the root_folder_id
             # Note: This simple traversal assumes one parent.
@@ -89,11 +97,14 @@ def build_file_tree(
             # We'll take the first parent for simplicity as per standard Shared Drive behavior.
 
             temp_chain = []
+            temp_chain_ids = []
 
             # Start climbing from the file itself
             curr = file_data
+            curr_id = file_id
             while True:
                 temp_chain.append(curr.get("name"))
+                temp_chain_ids.append(curr_id)
 
                 parents = curr.get("parents", [])
                 if not parents:
@@ -102,9 +113,9 @@ def build_file_tree(
                     # But wait, the loop logic needs to check parent ID.
                     break
 
-                parent_id = parents[0]
+                next_parent_id = parents[0]
 
-                if parent_id == config.root_folder_id:
+                if next_parent_id == config.root_folder_id:
                     # We found the root.
                     # The root folder name itself is usually not part of the path in terms of "Client/..."
                     # if "Client" is a child of Root.
@@ -113,12 +124,13 @@ def build_file_tree(
                     # So if Root is "Clients", and file is in "ClientA", path is "/ClientA/..."
                     break
 
-                if parent_id not in file_map:
+                if next_parent_id not in file_map:
                     # Parent not found in our list (maybe outside scope or we don't have access)
                     valid_path = False
                     break
 
-                curr = file_map[parent_id]
+                curr = file_map[next_parent_id]
+                curr_id = next_parent_id
 
             if not valid_path:
                 # Skip files not rooted in our target folder
@@ -132,6 +144,7 @@ def build_file_tree(
         # We stopped BEFORE adding Root.
         # So path is reversed temp_chain.
         path_segments = list(reversed(temp_chain))
+        path_ids = list(reversed(temp_chain_ids))
         
         # Normalize all path segments to ensure consistent Unicode representation
         path_segments = [normalize_unicode(segment) for segment in path_segments]
@@ -143,9 +156,14 @@ def build_file_tree(
         depth = len(path_segments)
 
         # Client
-        # First segment is client
+        # First segment is client (depth=1 folder)
         client_name = normalize_unicode(path_segments[0]) if path_segments else None
-        client_id = None  # We'd need to track IDs in the chain to get this, skipping for now unless critical
+        # client_id is the ID of the folder at depth=1
+        # path_ids[0] is always the client folder ID (first element after reverse)
+        if depth >= 1 and len(path_ids) >= 1:
+            client_id = path_ids[0]
+        else:
+            client_id = None
 
         # Parse Permissions
         permissions_data = file_data.get("permissions", [])
@@ -293,7 +311,9 @@ def build_file_tree(
             size_bytes=int(file_data.get("size")) if file_data.get("size") else None,
             owners=owners,
             last_modifying_user=file_data.get("lastModifyingUser"),
+            client_id=client_id,
             client_name=client_name,
+            parent_id=parent_id,
             location=location,
             depth=depth,
             is_shortcut=is_shortcut,

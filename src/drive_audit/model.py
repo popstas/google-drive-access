@@ -151,6 +151,7 @@ class FileInfo:
     # Enriched fields
     client_id: Optional[str] = None
     client_name: Optional[str] = None
+    parent_id: Optional[str] = None
     location: str = ""
     depth: int = 0
 
