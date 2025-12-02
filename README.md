@@ -154,7 +154,7 @@ Move files that sit at the second level of the shared drive (directly inside eac
 Run the command:
 
 ```bash
-python -m src.drive_audit.commands --config data/config.yml move_files_to_public_folder --dry-run
+python -m drive_audit.commands --config data/config.yml move_files_to_public_folder --dry-run
 ```
 
 ### move_files_csv
@@ -169,7 +169,7 @@ Move an explicit set of files listed in a comma-separated manifest (see `data/mo
 Run the command:
 
 ```bash
-python -m src.drive_audit.commands --config data/config.yml move_files_csv --dry-run
+python -m drive_audit.commands --config data/config.yml move_files_csv --dry-run
 ```
 
 ### compare_files
@@ -190,7 +190,7 @@ Configuration options in `compare` section:
 Run the command:
 
 ```bash
-python -m src.drive_audit.commands --config data/config.yml compare_files data/files_old.csv data/files_new.csv
+python -m drive_audit.commands --config data/config.yml compare_files data/files_old.csv data/files_new.csv
 ```
 
 ### drive_links_info

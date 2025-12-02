@@ -1,9 +1,13 @@
 import csv
+import importlib
 import re
 from pathlib import Path
 
 import pytest
 
+drive_links_info_module = importlib.import_module(
+    "drive_audit.commands.drive_links_info"
+)
 from drive_audit.commands import (
     compare_files_by_location,
     drive_links_info,
@@ -188,8 +192,22 @@ def test_compare_files_by_location_writes_differences(tmp_path: Path):
     with outputs["old"].open(encoding="utf-8") as handle:
         old_diff_rows = list(csv.DictReader(handle))
 
-    assert new_diff_rows == [{"location": "ClientC/File3", "client_name": "", "mime_type": "", "modified": ""}]
-    assert old_diff_rows == [{"location": "ClientA/File1", "client_name": "", "mime_type": "", "modified": ""}]
+    assert new_diff_rows == [
+        {
+            "location": "ClientC/File3",
+            "client_name": "",
+            "mime_type": "",
+            "modified": "",
+        }
+    ]
+    assert old_diff_rows == [
+        {
+            "location": "ClientA/File1",
+            "client_name": "",
+            "mime_type": "",
+            "modified": "",
+        }
+    ]
 
 
 def test_compare_files_by_location_normalizes_google_and_office_formats(tmp_path: Path):
@@ -236,7 +254,12 @@ def test_compare_files_by_location_normalizes_google_and_office_formats(tmp_path
         old_diff_rows = list(csv.DictReader(handle))
 
     assert new_diff_rows == [
-        {"location": "/Only/New", "client_name": "", "mime_type": "text/plain", "modified": ""}
+        {
+            "location": "/Only/New",
+            "client_name": "",
+            "mime_type": "text/plain",
+            "modified": "",
+        }
     ]
     assert old_diff_rows == []
 
@@ -686,7 +709,7 @@ def test_move_files_from_csv_moves_listed_files(tmp_path, monkeypatch):
         moved.append((file_id, new_parent, parents))
         return {"file_id": file_id, "new_parent": new_parent, "parents": parents}
 
-    monkeypatch.setattr("drive_audit.commands.move_file", fake_move_file)
+    monkeypatch.setattr("drive_audit.commands.move_from_csv.move_file", fake_move_file)
 
     results = move_files_from_csv(FakeService(), drive_config, csv_file, dry_run=False)
 
@@ -712,55 +735,63 @@ def test_drive_links_info_retrieves_folder_metadata(tmp_path, monkeypatch):
         "Client C,11111,\n",
         encoding="utf-8",
     )
-    
+
     output_file = tmp_path / "output.csv"
-    
+
     # Mock service.files().get() calls
     class FakeFiles:
         def get(self, fileId, fields, supportsAllDrives):
             if fileId == "folder123":
-                return FakeExecute({
-                    "id": "folder123",
-                    "name": "Client A Folder",
-                    "mimeType": "application/vnd.google-apps.folder",
-                    "parents": ["parent1"],
-                    "createdTime": "2025-01-01T00:00:00.000Z",
-                    "modifiedTime": "2025-01-02T00:00:00.000Z",
-                    "owners": [{"emailAddress": "owner@example.com"}],
-                    "lastModifyingUser": {"emailAddress": "user@example.com"},
-                    "webViewLink": "https://drive.google.com/drive/folders/folder123",
-                })
+                return FakeExecute(
+                    {
+                        "id": "folder123",
+                        "name": "Client A Folder",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "parents": ["parent1"],
+                        "createdTime": "2025-01-01T00:00:00.000Z",
+                        "modifiedTime": "2025-01-02T00:00:00.000Z",
+                        "owners": [{"emailAddress": "owner@example.com"}],
+                        "lastModifyingUser": {"emailAddress": "user@example.com"},
+                        "webViewLink": "https://drive.google.com/drive/folders/folder123",
+                    }
+                )
             elif fileId == "folder456":
-                return FakeExecute({
-                    "id": "folder456",
-                    "name": "Client B Folder",
-                    "mimeType": "application/vnd.google-apps.folder",
-                    "parents": ["parent2"],
-                    "createdTime": "2025-01-03T00:00:00.000Z",
-                    "modifiedTime": "2025-01-04T00:00:00.000Z",
-                    "owners": [{"emailAddress": "owner2@example.com"}],
-                    "lastModifyingUser": {"emailAddress": "user2@example.com"},
-                    "webViewLink": "https://drive.google.com/drive/folders/folder456",
-                })
+                return FakeExecute(
+                    {
+                        "id": "folder456",
+                        "name": "Client B Folder",
+                        "mimeType": "application/vnd.google-apps.folder",
+                        "parents": ["parent2"],
+                        "createdTime": "2025-01-03T00:00:00.000Z",
+                        "modifiedTime": "2025-01-04T00:00:00.000Z",
+                        "owners": [{"emailAddress": "owner2@example.com"}],
+                        "lastModifyingUser": {"emailAddress": "user2@example.com"},
+                        "webViewLink": "https://drive.google.com/drive/folders/folder456",
+                    }
+                )
             raise Exception(f"Unknown folder ID: {fileId}")
-    
+
     class FakeExecute:
         def __init__(self, data):
             self.data = data
-        
+
         def execute(self):
             return self.data
-    
+
     class FakeService:
         def files(self):
             return FakeFiles()
-    
+
     # Mock get_file_permissions
     def fake_get_permissions(service, file_id):
         return [{"type": "user", "role": "reader"}]
-    
-    monkeypatch.setattr("drive_audit.commands.get_file_permissions", fake_get_permissions)
-    
+
+    monkeypatch.setattr(
+        drive_links_info_module,
+        "get_file_permissions",
+        fake_get_permissions,
+    )
+
     # Run the command with cache disabled for test
     drive_links_info(
         FakeService(),
@@ -769,16 +800,16 @@ def test_drive_links_info_retrieves_folder_metadata(tmp_path, monkeypatch):
         output_path=output_file,
         cache_timeout_seconds=0,  # Disable cache for test
     )
-    
+
     # Verify output
     assert output_file.exists()
-    
+
     with output_file.open(encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
-    
+
     assert len(rows) == 3
-    
+
     # Check first row - has Drive metadata
     assert rows[0]["source_row"] == "2"
     assert rows[0]["Name"] == "Client A"
@@ -787,7 +818,7 @@ def test_drive_links_info_retrieves_folder_metadata(tmp_path, monkeypatch):
     assert rows[0]["folder_name"] == "Client A Folder"
     assert rows[0]["owner_emails"] == "owner@example.com"
     assert rows[0]["permissions_count"] == "1"
-    
+
     # Check second row - has Drive metadata
     assert rows[1]["source_row"] == "3"
     assert rows[1]["Name"] == "Client B"
@@ -796,7 +827,7 @@ def test_drive_links_info_retrieves_folder_metadata(tmp_path, monkeypatch):
     assert rows[1]["folder_name"] == "Client B Folder"
     assert rows[1]["owner_emails"] == "owner2@example.com"
     assert rows[1]["permissions_count"] == "1"
-    
+
     # Check third row - empty URL, should have original columns but empty Drive metadata
     assert rows[2]["source_row"] == "4"
     assert rows[2]["Name"] == "Client C"
@@ -815,23 +846,27 @@ def test_drive_links_info_handles_errors(tmp_path, monkeypatch):
         "Client B,67890,https://drive.google.com/drive/folders/error-folder\n",
         encoding="utf-8",
     )
-    
+
     output_file = tmp_path / "output.csv"
-    
+
     # Mock service.files().get() to raise error
     class FakeFiles:
         def get(self, fileId, fields, supportsAllDrives):
             raise Exception("API Error")
-    
+
     class FakeService:
         def files(self):
             return FakeFiles()
-    
+
     def fake_get_permissions(service, file_id):
         return []
-    
-    monkeypatch.setattr("drive_audit.commands.get_file_permissions", fake_get_permissions)
-    
+
+    monkeypatch.setattr(
+        drive_links_info_module,
+        "get_file_permissions",
+        fake_get_permissions,
+    )
+
     # Run the command - should not raise exception
     drive_links_info(
         FakeService(),
@@ -840,22 +875,22 @@ def test_drive_links_info_handles_errors(tmp_path, monkeypatch):
         output_path=output_file,
         cache_timeout_seconds=0,  # Disable cache for test
     )
-    
+
     # Verify output exists and contains error rows
     assert output_file.exists()
-    
+
     with output_file.open(encoding="utf-8") as f:
         reader = csv.DictReader(f)
         rows = list(reader)
-    
+
     assert len(rows) == 2
-    
+
     # Both rows should have errors and preserve original columns
     assert "error" in rows[0]
     assert rows[0]["Name"] == "Client A"
     assert rows[0]["Contact ID"] == "12345"
     assert rows[0]["folder_id"] == ""
-    
+
     assert "error" in rows[1]
     assert rows[1]["Name"] == "Client B"
     assert rows[1]["Contact ID"] == "67890"

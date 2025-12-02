@@ -21,11 +21,11 @@ def parse_datetime(dt_str: Optional[str]) -> Optional[datetime]:
 def normalize_unicode(text: str) -> str:
     """
     Normalize Unicode text to NFC (Canonical Composition) form.
-    
+
     This ensures that characters like 'й' are always represented consistently,
     whether they come as a single character (U+0439) or as decomposed
     characters (U+0438 + U+0306).
-    
+
     NFC is the standard form for most text processing and storage.
     """
     if not text:
@@ -145,7 +145,7 @@ def build_file_tree(
         # So path is reversed temp_chain.
         path_segments = list(reversed(temp_chain))
         path_ids = list(reversed(temp_chain_ids))
-        
+
         # Normalize all path segments to ensure consistent Unicode representation
         path_segments = [normalize_unicode(segment) for segment in path_segments]
 

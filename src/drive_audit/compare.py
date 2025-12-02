@@ -1,4 +1,5 @@
 """Functions for comparing file lists from CSV exports."""
+
 import csv
 import re
 import urllib.parse
@@ -60,8 +61,22 @@ MIME_NORMALIZATION_GROUPS = {
             "image/png",  # .png (first slide only - PARTIAL)
             "image/svg+xml",  # .svg (first slide only - PARTIAL)
         },
-        "extensions": {".pptx", ".odp", ".pdf", ".txt", ".jpg", ".jpeg", ".png", ".svg"},
-        "partial_exports": {".jpg", ".jpeg", ".png", ".svg"},  # Images only export first slide
+        "extensions": {
+            ".pptx",
+            ".odp",
+            ".pdf",
+            ".txt",
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".svg",
+        },
+        "partial_exports": {
+            ".jpg",
+            ".jpeg",
+            ".png",
+            ".svg",
+        },  # Images only export first slide
     },
     # Google Drawings (application/vnd.google-apps.drawing)
     # Can export to: .pdf, .jpg, .png, .svg
@@ -145,20 +160,18 @@ MIME_NORMALIZATION_GROUPS = {
 
 # Windows/Linux forbidden characters in file names
 # These cannot be used in file/folder names: < > : " | ? * \ / and control chars (0x00-0x1F)
-FORBIDDEN_FILE_NAME_CHARS = {
-    '<', '>', ':', '"', '|', '?', '*', '\\', '/'
-}
+FORBIDDEN_FILE_NAME_CHARS = {"<", ">", ":", '"', "|", "?", "*", "\\", "/"}
 # Add control characters (0x00-0x1F)
 FORBIDDEN_FILE_NAME_CHARS.update(chr(i) for i in range(32))
 
 FORBIDDEN_FILE_NAME_CHARS_WITH_SLASH = FORBIDDEN_FILE_NAME_CHARS.copy()
-FORBIDDEN_FILE_NAME_CHARS_WITH_SLASH.add('/')
+FORBIDDEN_FILE_NAME_CHARS_WITH_SLASH.add("/")
 
 
 def normalize_unicode(text: str) -> str:
     """
     Normalize Unicode text to NFC (Canonical Composition) form.
-    
+
     This ensures consistent representation of characters like 'й',
     whether they come as single characters or decomposed sequences.
     """
@@ -170,29 +183,29 @@ def normalize_unicode(text: str) -> str:
 def normalize_file_name(name: str, replace_with: str = "_") -> str:
     """
     Normalize file/folder name by replacing forbidden characters.
-    
+
     Replaces characters that cannot be used in file names on Windows/Linux:
     < > : " | ? * \\ / and control characters (0x00-0x1F)
-    
+
     Special handling: URL-like patterns (://) are normalized to single replacement
     to match downloaded file names where :// becomes _.
-    
+
     Args:
         name: File or folder name to normalize
         replace_with: Character to replace forbidden characters with (default: '_')
-        
+
     Returns:
         Normalized name with forbidden characters replaced
     """
     if not name:
         return name
-    
+
     # First, normalize URL-like patterns: :// -> single replacement
-    # This handles cases like "https://example" -> "https_example" 
+    # This handles cases like "https://example" -> "https_example"
     # to match downloaded names where :// becomes _
     # Handle both :// and :/ patterns
-    result = re.sub(r':/+/?', replace_with, name)
-    
+    result = re.sub(r":/+/?", replace_with, name)
+
     # Handle URL-encoded characters (e.g., %2F -> / -> _)
     # Common URL-encoded chars that appear in file names: %2F (/) and others
     # Also handle cases where %2F was already converted to _2F (without decoding)
@@ -202,16 +215,16 @@ def normalize_file_name(name: str, replace_with: str = "_") -> str:
     # Handle case where URL-encoded %2F was already converted to _2F without decoding
     # In new CSV, %2F might appear as _2F (literal text, not decoded)
     # Replace _2F pattern with / to match %2F behavior
-    result = re.sub(r'_2F', '/', result)
-    
+    result = re.sub(r"_2F", "/", result)
+
     # Now handle %2F - convert to / (path separator, not underscore)
-    result = re.sub(r'%2F', '/', result)
+    result = re.sub(r"%2F", "/", result)
     try:
         # Try to decode any remaining URL-encoded parts
-        result = urllib.parse.unquote(result, errors='ignore')
+        result = urllib.parse.unquote(result, errors="ignore")
     except Exception:
         pass
-    
+
     # Replace remaining forbidden characters and special cases
     normalized = ""
     for char in result:
@@ -221,49 +234,51 @@ def normalize_file_name(name: str, replace_with: str = "_") -> str:
             normalized += replace_with
         else:
             normalized += char
-    
+
     # Replace leading/trailing spaces and dots (Windows restriction)
     normalized = normalized.strip(" .")
-    
+
     # Replace multiple consecutive replacements with single one
     # This ensures that :// -> _, and multiple _ become single _
-    # But for URL patterns, normalize both "https_www.example_" and "https_www.example__" 
+    # But for URL patterns, normalize both "https_www.example_" and "https_www.example__"
     # to the same form (single underscore) to ensure matching
     # First, normalize double underscores in URL patterns to single underscore
     # Pattern: "https_www.example__" -> "https_www.example_"
-    normalized = re.sub(r'(https?_[a-z0-9.-]+)__', r'\1_', normalized, flags=re.IGNORECASE)
-    
+    normalized = re.sub(
+        r"(https?_[a-z0-9.-]+)__", r"\1_", normalized, flags=re.IGNORECASE
+    )
+
     # Replace multiple consecutive replacements with single one
     normalized = re.sub(f"{re.escape(replace_with)}+", replace_with, normalized)
-    
+
     return normalized
 
 
 def remove_duplicate_suffix(name: str) -> str:
     """
     Remove duplicate suffix from file name.
-    
+
     Removes patterns like (1), (2), (10), etc. before the file extension.
     Example: "file(1).pdf" -> "file.pdf", "document(2).docx" -> "document.docx"
-    
+
     Args:
         name: File or folder name
-        
+
     Returns:
         Name with duplicate suffix removed, or original name if no suffix found
     """
     if not name:
         return name
-    
+
     # Pattern to match (N) before extension: (1).pdf, (2).docx, etc.
     # Match (digits) followed by .extension at the end
-    duplicate_pattern = re.compile(r'\((\d+)\)(\.[^.]+)$')
-    
+    duplicate_pattern = re.compile(r"\((\d+)\)(\.[^.]+)$")
+
     match = duplicate_pattern.search(name)
     if match:
         # Replace (N).ext with .ext
-        return duplicate_pattern.sub(r'\2', name)
-    
+        return duplicate_pattern.sub(r"\2", name)
+
     return name
 
 
@@ -278,40 +293,38 @@ def should_ignore_public_subdir_row(
 ) -> bool:
     """
     Check if a row should be ignored because it's the public_subdir folder itself.
-    
+
     Ignores the folder itself (e.g., /Client/public) but not its children
     (e.g., /Client/public/file.txt).
-    
+
     Args:
         row: CSV row with location, type, and mime_type fields
         public_subdir: Name of the public subdirectory (e.g., "public")
         ignore_public_subdir: Whether to ignore public_subdir folders
-        
+
     Returns:
         True if this row should be ignored, False otherwise
     """
     if not ignore_public_subdir or not public_subdir:
         return False
-    
+
     location = (row.get("location") or "").strip()
     if not location:
         return False
-    
+
     # Check if location ends with /{public_subdir} (the folder itself)
     # But not /{public_subdir}/something (files inside)
     if location.endswith(f"/{public_subdir}"):
         # Check if this is actually a folder
         mime_type = (row.get("mimeType") or row.get("mime_type") or "").strip()
         file_type = (row.get("type") or "").strip().lower()
-        
+
         # It's a folder if mime_type contains "folder" or type is "folder"
-        is_folder = (
-            "folder" in mime_type.lower() or file_type == "folder"
-        )
-        
+        is_folder = "folder" in mime_type.lower() or file_type == "folder"
+
         if is_folder:
             return True
-    
+
     return False
 
 
@@ -321,42 +334,42 @@ def is_empty_folder(
 ) -> bool:
     """
     Check if a folder is empty (contains no files, only folders or nothing).
-    
+
     A folder is considered empty if:
     - It's a folder (not a file)
     - No files (type="file") exist with a location that starts with the folder's location
-    
+
     Args:
         folder_row: CSV row representing a folder with location, type, and mime_type fields
         all_rows: All CSV rows to check for files inside the folder
-        
+
     Returns:
         True if the folder is empty (contains no files), False otherwise
     """
     location = (folder_row.get("location") or "").strip()
     if not location:
         return False
-    
+
     # Normalize location for consistent comparison
     folder_location = normalize_unicode(location.rstrip("/"))
-    
+
     # Check if any file (not folder) exists with location starting with folder_location + "/"
     for row in all_rows:
         row_location = normalize_unicode((row.get("location") or "").strip())
         if not row_location:
             continue
-        
+
         # Check if this row is a file (not a folder)
         mime_type = (row.get("mimeType") or row.get("mime_type") or "").strip()
         file_type = (row.get("type") or "").strip().lower()
         is_file = file_type == "file" and "folder" not in mime_type.lower()
-        
+
         if is_file:
             # Check if this file is inside the folder
             # File location should start with folder_location + "/"
             if row_location.startswith(folder_location + "/"):
                 return False  # Folder contains at least one file, not empty
-    
+
     return True  # No files found in this folder
 
 
@@ -367,65 +380,79 @@ def should_ignore_folder_row(
 ) -> bool:
     """
     Check if a row should be ignored based on ignore_folders list.
-    
+
     Ignores:
     1. Folders that have a name matching one in ignore_folders list
     2. Any row (file or folder) whose location is inside an ignored folder
-    
+
     Args:
         row: CSV row with location, type, mime_type, and name fields
         all_rows: All CSV rows to find ignored folder locations
         ignore_folders: List of folder names to ignore
-        
+
     Returns:
         True if this row should be ignored, False otherwise
     """
     if not ignore_folders:
         return False
-    
+
     location = (row.get("location") or "").strip()
     if not location:
         return False
-    
+
     # Normalize location for consistent comparison
     location = normalize_unicode(location)
-    
+
     # Normalize ignore_folders list for comparison
-    normalized_ignore_folders = [normalize_unicode(folder.strip()) for folder in ignore_folders]
-    
+    normalized_ignore_folders = [
+        normalize_unicode(folder.strip()) for folder in ignore_folders
+    ]
+
     # First, find all ignored folder locations from all_rows
     ignored_folder_locations = set()
     for other_row in all_rows:
         other_location = normalize_unicode((other_row.get("location") or "").strip())
         if not other_location:
             continue
-        
+
         # Check if this row is a folder that matches ignore_folders
-        other_mime_type = (other_row.get("mimeType") or other_row.get("mime_type") or "").strip()
+        other_mime_type = (
+            other_row.get("mimeType") or other_row.get("mime_type") or ""
+        ).strip()
         other_file_type = (other_row.get("type") or "").strip().lower()
-        is_other_folder = "folder" in other_mime_type.lower() or other_file_type == "folder"
-        
+        is_other_folder = (
+            "folder" in other_mime_type.lower() or other_file_type == "folder"
+        )
+
         if is_other_folder:
             # Get folder name from name field or extract from location
-            other_folder_name_from_field = normalize_unicode((other_row.get("name") or "").strip())
+            other_folder_name_from_field = normalize_unicode(
+                (other_row.get("name") or "").strip()
+            )
             other_location_parts = other_location.strip("/").split("/")
             other_folder_name_from_location = ""
             if other_location_parts:
-                other_folder_name_from_location = normalize_unicode(other_location_parts[-1])
-            
+                other_folder_name_from_location = normalize_unicode(
+                    other_location_parts[-1]
+                )
+
             # Check if folder name matches any in ignore_folders
-            if (other_folder_name_from_field in normalized_ignore_folders or
-                other_folder_name_from_location in normalized_ignore_folders):
+            if (
+                other_folder_name_from_field in normalized_ignore_folders
+                or other_folder_name_from_location in normalized_ignore_folders
+            ):
                 # Add this folder location to ignored set
                 ignored_folder_locations.add(other_location.rstrip("/"))
-    
+
     # Check if current row's location is inside any ignored folder
     location_normalized = location.rstrip("/")
     for ignored_location in ignored_folder_locations:
         # Check if location is the ignored folder itself or inside it
-        if location_normalized == ignored_location or location.startswith(ignored_location + "/"):
+        if location_normalized == ignored_location or location.startswith(
+            ignored_location + "/"
+        ):
             return True
-    
+
     return False
 
 
@@ -460,12 +487,12 @@ def build_fieldnames(primary: Sequence[str], secondary: Sequence[str]) -> List[s
             if field not in merged:
                 merged.append(field)
         fieldnames = merged
-    
+
     # Move "location" to first position if it exists
     if "location" in fieldnames:
         fieldnames.remove("location")
         fieldnames.insert(0, "location")
-    
+
     return fieldnames
 
 
@@ -514,16 +541,20 @@ def compare_files_by_location(
         ]
         stats["ignored_public_subdirs_old"] = len(ignored_old)
         stats["ignored_public_subdirs_new"] = len(ignored_new)
-        
+
         old_rows = [
             row
             for row in old_rows
-            if not should_ignore_public_subdir_row(row, public_subdir, ignore_public_subdir)
+            if not should_ignore_public_subdir_row(
+                row, public_subdir, ignore_public_subdir
+            )
         ]
         new_rows = [
             row
             for row in new_rows
-            if not should_ignore_public_subdir_row(row, public_subdir, ignore_public_subdir)
+            if not should_ignore_public_subdir_row(
+                row, public_subdir, ignore_public_subdir
+            )
         ]
         logger.info(
             "Filtered out public_subdir folders: {} from old CSV, {} from new CSV (public_subdir: {}, ignore: {})",
@@ -537,34 +568,40 @@ def compare_files_by_location(
     if ignore_folders:
         # Combine all rows to find ignored folder locations (do this once, not per row)
         all_rows = old_rows + new_rows
-        
+
         # Build ignored folder locations set once
-        normalized_ignore_folders = [normalize_unicode(folder.strip()) for folder in ignore_folders]
+        normalized_ignore_folders = [
+            normalize_unicode(folder.strip()) for folder in ignore_folders
+        ]
         ignored_folder_locations = set()
         for row in all_rows:
             location = normalize_unicode((row.get("location") or "").strip())
             if not location:
                 continue
-            
+
             # Check if this row is a folder that matches ignore_folders
             mime_type = (row.get("mimeType") or row.get("mime_type") or "").strip()
             file_type = (row.get("type") or "").strip().lower()
             is_folder = "folder" in mime_type.lower() or file_type == "folder"
-            
+
             if is_folder:
                 # Get folder name from name field or extract from location
-                folder_name_from_field = normalize_unicode((row.get("name") or "").strip())
+                folder_name_from_field = normalize_unicode(
+                    (row.get("name") or "").strip()
+                )
                 location_parts = location.strip("/").split("/")
                 folder_name_from_location = ""
                 if location_parts:
                     folder_name_from_location = normalize_unicode(location_parts[-1])
-                
+
                 # Check if folder name matches any in ignore_folders
-                if (folder_name_from_field in normalized_ignore_folders or
-                    folder_name_from_location in normalized_ignore_folders):
+                if (
+                    folder_name_from_field in normalized_ignore_folders
+                    or folder_name_from_location in normalized_ignore_folders
+                ):
                     # Add this folder location to ignored set
                     ignored_folder_locations.add(location.rstrip("/"))
-        
+
         # Now filter rows using the cached ignored_folder_locations
         def should_ignore_row(row: Dict[str, str]) -> bool:
             location = normalize_unicode((row.get("location") or "").strip())
@@ -572,15 +609,17 @@ def compare_files_by_location(
                 return False
             location_normalized = location.rstrip("/")
             for ignored_location in ignored_folder_locations:
-                if location_normalized == ignored_location or location.startswith(ignored_location + "/"):
+                if location_normalized == ignored_location or location.startswith(
+                    ignored_location + "/"
+                ):
                     return True
             return False
-        
+
         ignored_old = [row for row in old_rows if should_ignore_row(row)]
         ignored_new = [row for row in new_rows if should_ignore_row(row)]
         stats["ignored_folders_old"] = len(ignored_old)
         stats["ignored_folders_new"] = len(ignored_new)
-        
+
         old_rows = [row for row in old_rows if not should_ignore_row(row)]
         new_rows = [row for row in new_rows if not should_ignore_row(row)]
         logger.info(
@@ -598,25 +637,33 @@ def compare_files_by_location(
             for row in old_rows
             if (
                 # Check if it's a folder
-                ("folder" in (row.get("mimeType") or row.get("mime_type") or "").lower() or
-                 (row.get("type") or "").strip().lower() == "folder")
-            ) and is_empty_folder(row, old_rows)
+                (
+                    "folder"
+                    in (row.get("mimeType") or row.get("mime_type") or "").lower()
+                    or (row.get("type") or "").strip().lower() == "folder"
+                )
+            )
+            and is_empty_folder(row, old_rows)
         ]
-        
+
         # Filter out empty folders from new_rows (check against new_rows only)
         ignored_empty_new = [
             row
             for row in new_rows
             if (
                 # Check if it's a folder
-                ("folder" in (row.get("mimeType") or row.get("mime_type") or "").lower() or
-                 (row.get("type") or "").strip().lower() == "folder")
-            ) and is_empty_folder(row, new_rows)
+                (
+                    "folder"
+                    in (row.get("mimeType") or row.get("mime_type") or "").lower()
+                    or (row.get("type") or "").strip().lower() == "folder"
+                )
+            )
+            and is_empty_folder(row, new_rows)
         ]
-        
+
         stats["ignored_empty_folders_old"] = len(ignored_empty_old)
         stats["ignored_empty_folders_new"] = len(ignored_empty_new)
-        
+
         # Build set of empty folder locations for efficient filtering
         empty_folder_locations_old = {
             normalize_unicode((row.get("location") or "").strip().rstrip("/"))
@@ -626,19 +673,21 @@ def compare_files_by_location(
             normalize_unicode((row.get("location") or "").strip().rstrip("/"))
             for row in ignored_empty_new
         }
-        
+
         # Filter out empty folders
         old_rows = [
             row
             for row in old_rows
-            if normalize_unicode((row.get("location") or "").strip().rstrip("/")) not in empty_folder_locations_old
+            if normalize_unicode((row.get("location") or "").strip().rstrip("/"))
+            not in empty_folder_locations_old
         ]
         new_rows = [
             row
             for row in new_rows
-            if normalize_unicode((row.get("location") or "").strip().rstrip("/")) not in empty_folder_locations_new
+            if normalize_unicode((row.get("location") or "").strip().rstrip("/"))
+            not in empty_folder_locations_new
         ]
-        
+
         logger.info(
             "Filtered out empty folders: {} from old CSV, {} from new CSV (ignore_empty_folders: {})",
             stats["ignored_empty_folders_old"],
@@ -701,12 +750,16 @@ def compare_files_by_location(
             new_matches = new_by_normalized[norm_loc]
 
             for old_row in old_matches:
-                old_actual_loc = normalize_unicode((old_row.get("location") or "").strip())
+                old_actual_loc = normalize_unicode(
+                    (old_row.get("location") or "").strip()
+                )
                 old_mime = old_row.get("mimeType", "").strip()
                 old_suffix = Path(old_actual_loc).suffix.lower()
 
                 for new_row in new_matches:
-                    new_actual_loc = normalize_unicode((new_row.get("location") or "").strip())
+                    new_actual_loc = normalize_unicode(
+                        (new_row.get("location") or "").strip()
+                    )
                     new_mime = new_row.get("mimeType", "").strip()
                     new_suffix = Path(new_actual_loc).suffix.lower()
 
@@ -715,30 +768,41 @@ def compare_files_by_location(
                         old_is_partial = False
                         new_is_partial = False
                         partial_warning = ""
-                        
+
                         # Find which group these files belong to
                         matched_group = None
-                        for group_name, group_values in MIME_NORMALIZATION_GROUPS.items():
-                            if old_mime in group_values["mimes"] or old_suffix in group_values["extensions"]:
+                        for (
+                            group_name,
+                            group_values,
+                        ) in MIME_NORMALIZATION_GROUPS.items():
+                            if (
+                                old_mime in group_values["mimes"]
+                                or old_suffix in group_values["extensions"]
+                            ):
                                 matched_group = group_name
                                 break
-                            if new_mime in group_values["mimes"] or new_suffix in group_values["extensions"]:
+                            if (
+                                new_mime in group_values["mimes"]
+                                or new_suffix in group_values["extensions"]
+                            ):
                                 matched_group = group_name
                                 break
-                        
+
                         if matched_group:
-                            partial_exports = MIME_NORMALIZATION_GROUPS[matched_group].get("partial_exports", set())
+                            partial_exports = MIME_NORMALIZATION_GROUPS[
+                                matched_group
+                            ].get("partial_exports", set())
                             if old_suffix in partial_exports:
                                 old_is_partial = True
                             if new_suffix in partial_exports:
                                 new_is_partial = True
-                            
+
                             if old_is_partial or new_is_partial:
                                 if matched_group == "spreadsheet":
                                     partial_warning = "WARNING: CSV/TSV exports only contain first sheet"
                                 elif matched_group == "presentation":
                                     partial_warning = "WARNING: Image exports only contain first slide"
-                        
+
                         mismatch_row = {
                             "normalized_location": norm_loc,
                             "old_location": old_actual_loc,
@@ -765,12 +829,14 @@ def compare_files_by_location(
             for row in sorted_rows:
                 # Map mimeType to mime_type if needed
                 mime_type = row.get("mime_type") or row.get("mimeType") or ""
-                writer.writerow({
-                    "location": row.get("location", ""),
-                    "client_name": row.get("client_name", ""),
-                    "mime_type": mime_type,
-                    "modified": row.get("modified", ""),
-                })
+                writer.writerow(
+                    {
+                        "location": row.get("location", ""),
+                        "client_name": row.get("client_name", ""),
+                        "mime_type": mime_type,
+                        "modified": row.get("modified", ""),
+                    }
+                )
         return output_path
 
     output_new = write_rows(new_only_rows, output_new_path)
@@ -807,8 +873,13 @@ def compare_files_by_location(
         ]
         output_format_mismatches_path.parent.mkdir(parents=True, exist_ok=True)
         # Sort format mismatches by normalized_location for easier comparison
-        sorted_format_mismatches = sorted(format_mismatches, key=lambda r: (r.get("normalized_location") or "").lower())
-        with output_format_mismatches_path.open("w", newline="", encoding="utf-8") as csv_handle:
+        sorted_format_mismatches = sorted(
+            format_mismatches,
+            key=lambda r: (r.get("normalized_location") or "").lower(),
+        )
+        with output_format_mismatches_path.open(
+            "w", newline="", encoding="utf-8"
+        ) as csv_handle:
             writer = csv.DictWriter(csv_handle, fieldnames=mismatch_fieldnames)
             writer.writeheader()
             for row in sorted_format_mismatches:
