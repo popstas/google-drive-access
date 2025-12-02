@@ -15,6 +15,7 @@ def sample_config_data():
             "getChildTasks": {"url": "child_url", "token": "child_token"},
             "getManager": {"url": "manager_url", "token": "manager_token"},
             "getClientTask": {"url": "client_url", "token": "client_token"},
+            "updateContact": {"url": "update_url", "token": "update_token"},
             "role": "writer",
         },
         "http": {"port": 1234, "token": "secret"},
@@ -31,6 +32,8 @@ def test_build_planfix_config(sample_config_data):
     assert planfix_config.get_manager.token == "manager_token"
     assert planfix_config.get_client_task.url == "client_url"
     assert planfix_config.get_client_task.token == "client_token"
+    assert planfix_config.update_contact.url == "update_url"
+    assert planfix_config.update_contact.token == "update_token"
 
 
 def test_build_http_config_respects_language(sample_config_data):
