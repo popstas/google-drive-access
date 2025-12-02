@@ -68,7 +68,9 @@ class PlanfixClient:
         except (ValueError, TypeError):
             raise ValueError(f"Invalid contact ID: {contact_id} (must be a number)")
         payload = {"contactId": contact_id_int, "google_folder": google_folder}
-        logger.debug("Updating contact {} with google_folder={}", contact_id_int, google_folder)
+        logger.debug(
+            "Updating contact {} with google_folder={}", contact_id_int, google_folder
+        )
         response = requests.post(
             self._config.update_contact.url,
             headers=self._headers(self._config.update_contact.token),

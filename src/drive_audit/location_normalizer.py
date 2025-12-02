@@ -4,6 +4,7 @@ This module provides simplified location normalization that replaces
 basic forbidden characters (/, :, ?) with underscores, without complex
 path flattening/unflattening logic.
 """
+
 import re
 from pathlib import Path
 from typing import Dict
@@ -64,7 +65,7 @@ class LocationNormalizer:
         # Replace / first, then - to ensure consistent normalization
         location = location.replace("/", "_")
         location = location.replace("-", "_")
-        
+
         # Step 3: Apply normalize_file_name to replace other forbidden characters
         # This replaces :, ? and other forbidden chars with _
         if self.normalize_file_names:
@@ -76,9 +77,9 @@ class LocationNormalizer:
         else:
             # Even without normalize_file_names, we still need to handle URL patterns
             # Replace :// and :/ patterns
-            location = re.sub(r':/+/?', '_', location)
+            location = re.sub(r":/+/?", "_", location)
             # Replace other forbidden characters that might cause issues
-            location = location.replace('?', '_').replace(':', '_')
+            location = location.replace("?", "_").replace(":", "_")
 
         # Step 4: Remove duplicate suffixes if requested
         if self.ignore_duplicate_suffixes:
@@ -86,7 +87,7 @@ class LocationNormalizer:
             # Find the last part (after last _) or use entire location if no _
             last_underscore = location.rfind("_")
             if last_underscore >= 0:
-                last_part = location[last_underscore + 1:]
+                last_part = location[last_underscore + 1 :]
                 if "." in last_part:
                     normalized_last = remove_duplicate_suffix(last_part)
                     location = location[: last_underscore + 1] + normalized_last
@@ -98,7 +99,7 @@ class LocationNormalizer:
         # Step 5: Normalize MIME types (remove extension if in same group) - once
         # Also remove all extensions recursively (handles cases like .csv.xlsx)
         mime_type = (row.get("mimeType") or row.get("mime_type") or "").strip()
-        
+
         # Remove all extensions recursively until no more extensions found
         # This handles cases like "file.csv.xlsx" -> "file"
         # We remove all extensions for comparison, regardless of MIME groups
@@ -107,10 +108,10 @@ class LocationNormalizer:
         while iteration < max_iterations:
             location_for_suffix = location.rstrip("_")
             suffix = Path(location_for_suffix).suffix.lower()
-            
+
             if not suffix or len(suffix) <= 1:
                 break  # No extension found
-            
+
             # Remove the extension
             suffix_len = len(suffix)
             # Handle trailing underscore before extension (e.g., "file_.xlsx")
@@ -119,7 +120,7 @@ class LocationNormalizer:
             elif location.lower().endswith(suffix + "_"):
                 location = location[: -(suffix_len + 1)]
             elif location.lower().endswith(suffix):
-                location = location[: -suffix_len]
+                location = location[:-suffix_len]
             location = location.rstrip("_")
             iteration += 1
 
@@ -158,4 +159,3 @@ def normalize_location(
         ignore_duplicate_suffixes=ignore_duplicate_suffixes,
     )
     return normalizer.normalize(row)
-

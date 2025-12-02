@@ -17,17 +17,17 @@ COMPARE_ONLY_OLD = Path("data/compare_only_old.csv")
 def get_row_counts() -> dict:
     """Get current row counts from compare output files."""
     counts = {"new_only": 0, "old_only": 0}
-    
+
     if COMPARE_ONLY_NEW.exists():
         with open(COMPARE_ONLY_NEW, encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             counts["new_only"] = sum(1 for _ in reader)
-    
+
     if COMPARE_ONLY_OLD.exists():
         with open(COMPARE_ONLY_OLD, encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             counts["old_only"] = sum(1 for _ in reader)
-    
+
     return counts
 
 
@@ -53,18 +53,18 @@ def check_compare_results() -> bool:
     """Check if current compare results show improvement (fewer rows)."""
     current_counts = get_row_counts()
     previous_counts = load_previous_counts()
-    
+
     print("=" * 60)
     print("Compare Results Check")
     print("=" * 60)
-    
+
     if not previous_counts:
         print("No previous results found. Storing current counts as baseline.")
         print(f"  New-only rows: {current_counts['new_only']}")
         print(f"  Old-only rows: {current_counts['old_only']}")
         save_counts(current_counts)
         return True
-    
+
     print("Previous results:")
     print(f"  New-only rows: {previous_counts.get('new_only', 0)}")
     print(f"  Old-only rows: {previous_counts.get('old_only', 0)}")
@@ -73,11 +73,15 @@ def check_compare_results() -> bool:
     print(f"  New-only rows: {current_counts['new_only']}")
     print(f"  Old-only rows: {current_counts['old_only']}")
     print()
-    
+
     # Check if counts decreased
-    new_decreased = current_counts["new_only"] < previous_counts.get("new_only", float("inf"))
-    old_decreased = current_counts["old_only"] < previous_counts.get("old_only", float("inf"))
-    
+    new_decreased = current_counts["new_only"] < previous_counts.get(
+        "new_only", float("inf")
+    )
+    old_decreased = current_counts["old_only"] < previous_counts.get(
+        "old_only", float("inf")
+    )
+
     if new_decreased and old_decreased:
         print("✓ SUCCESS: Both row counts decreased!")
         print("  This indicates normalization improvements are working.")
@@ -88,20 +92,23 @@ def check_compare_results() -> bool:
     else:
         print("✗ WARNING: Row counts did not decrease.")
         if current_counts["new_only"] > previous_counts.get("new_only", 0):
-            print(f"  New-only increased by {current_counts['new_only'] - previous_counts.get('new_only', 0)}")
+            print(
+                f"  New-only increased by {current_counts['new_only'] - previous_counts.get('new_only', 0)}"
+            )
         if current_counts["old_only"] > previous_counts.get("old_only", 0):
-            print(f"  Old-only increased by {current_counts['old_only'] - previous_counts.get('old_only', 0)}")
+            print(
+                f"  Old-only increased by {current_counts['old_only'] - previous_counts.get('old_only', 0)}"
+            )
         print("  This may indicate new normalization issues were introduced.")
-    
+
     print()
     print("Updating stored counts...")
     save_counts(current_counts)
     print("=" * 60)
-    
+
     return new_decreased and old_decreased
 
 
 if __name__ == "__main__":
     success = check_compare_results()
     sys.exit(0 if success else 1)
-
