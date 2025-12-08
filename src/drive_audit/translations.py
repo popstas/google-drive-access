@@ -18,6 +18,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "folder_created": "Folder {folder_name} created. {details}, folder_url: {folder_url}",
         "not_found": "Not found",
         "unable_extract_folder_id": "Unable to extract folder_id from folder_url",
+        "rate_limit_exceeded": "Google API rate limit exceeded, please try again in a minute",
         "none": "none",
     },
     "ru": {
@@ -35,6 +36,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "folder_created": "Папка {folder_name} создана. {details}. {folder_url}",
         "not_found": "Не найдено",
         "unable_extract_folder_id": "Не удалось извлечь folder_id из folder_url",
+        "rate_limit_exceeded": "Превышены лимиты Google API, попробуйте через минуту.",
         "none": "нет",
     },
 }

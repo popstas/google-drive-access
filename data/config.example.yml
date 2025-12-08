@@ -59,6 +59,7 @@ planfix:
     url: https://api.example.com/client-task
     token: skldjfh
   role: "writer"
+  timeout: 120  # Request timeout in seconds
 
 http:
   port: 7587
