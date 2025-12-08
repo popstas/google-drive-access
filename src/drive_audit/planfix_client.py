@@ -26,7 +26,7 @@ class PlanfixClient:
             self._config.get_child_tasks.url,
             headers=self._headers(self._config.get_child_tasks.token),
             json=payload,
-            timeout=60,
+            timeout=self._config.timeout,
         )
         response.raise_for_status()
         data = response.json()
@@ -41,31 +41,29 @@ class PlanfixClient:
         if assignee_id in self._manager_cache:
             cached_manager, cached_time = self._manager_cache[assignee_id]
             if time() - cached_time < 86400:  # 24 hours
-                logger.debug(
-                    "Using cached manager for assignee_id={}", assignee_id
-                )
+                logger.debug("Using cached manager for assignee_id={}", assignee_id)
                 return cached_manager
             else:
                 logger.debug(
                     "Cache expired for assignee_id={}, fetching fresh data",
                     assignee_id,
                 )
-        
+
         payload = {"id": int(assignee_id)}
         logger.debug("Fetching manager for assignee_id={}", assignee_id)
         response = requests.post(
             self._config.get_manager.url,
             headers=self._headers(self._config.get_manager.token),
             json=payload,
-            timeout=60,
+            timeout=self._config.timeout,
         )
         response.raise_for_status()
         manager = response.json()
         logger.debug("Manager lookup result for {}: {}", assignee_id, manager)
-        
+
         # Store in cache
         self._manager_cache[assignee_id] = (manager, time())
-        
+
         return manager
 
     def get_client_task(self, client_id: int) -> Dict[str, Any]:
@@ -75,7 +73,7 @@ class PlanfixClient:
             self._config.get_client_task.url,
             headers=self._headers(self._config.get_client_task.token),
             json=payload,
-            timeout=60,
+            timeout=self._config.timeout,
         )
         response.raise_for_status()
         client_task = response.json()
@@ -95,7 +93,7 @@ class PlanfixClient:
             self._config.update_contact.url,
             headers=self._headers(self._config.update_contact.token),
             json=payload,
-            timeout=60,
+            timeout=self._config.timeout,
         )
         response.raise_for_status()
         result = response.json()

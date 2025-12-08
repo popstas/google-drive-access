@@ -35,6 +35,7 @@ def build_planfix_config(config_data: Dict[str, Any]) -> PlanfixConfig:
             token=planfix_section["updateContact"]["token"],
         ),
         role=planfix_section["role"],
+        timeout=int(planfix_section.get("timeout", 120)),
     )
 
 

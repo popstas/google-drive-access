@@ -16,6 +16,7 @@ class PlanfixConfig:
     get_client_task: PlanfixEndpointConfig
     update_contact: PlanfixEndpointConfig
     role: str
+    timeout: int = 120
 
 
 @dataclass
