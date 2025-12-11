@@ -132,6 +132,10 @@ def create_handler(
             try:
                 contact_id = int(payload["contact_id"])
                 folder_name = str(payload["folder_name"]).strip()
+                folder_name_words = folder_name.split()
+                name_warning = ""
+                if len(folder_name_words) == 1:
+                    name_warning = " \n" + self.translate("folder_name_single_word")
                 task_id, initial_assignee_ids = get_task_and_assignees(
                     planfix_client, contact_id
                 )
@@ -142,13 +146,13 @@ def create_handler(
                     folder_url = (
                         f"https://drive.google.com/drive/folders/{folder['id']}"
                     )
+                    answer_text = (
+                        self.translate("client_folder_exists", folder_url=folder_url)
+                        + name_warning
+                    )
                     self.send_json(
                         200,
-                        {
-                            "answer": self.translate(
-                                "client_folder_exists", folder_url=folder_url
-                            )
-                        },
+                        {"answer": answer_text},
                     )
                     return
 
@@ -177,15 +181,19 @@ def create_handler(
                 existing=self._format_accounts(existing_accounts),
             )
             folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
+            answer_text = (
+                self.translate(
+                    "folder_created",
+                    folder_name=folder_name,
+                    details=answer,
+                    folder_url=folder_url,
+                )
+                + name_warning
+            )
             self.send_json(
                 200,
                 {
-                    "answer": self.translate(
-                        "folder_created",
-                        folder_name=folder_name,
-                        details=answer,
-                        folder_url=folder_url,
-                    ),
+                    "answer": answer_text,
                     "folder_id": folder["id"],
                     "folder_url": folder_url,
                     "granted_accounts": granted_accounts,

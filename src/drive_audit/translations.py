@@ -20,6 +20,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unable_extract_folder_id": "Unable to extract folder_id from folder_url",
         "rate_limit_exceeded": "Google API rate limit exceeded, please try again in a minute",
         "none": "none",
+        "folder_name_single_word": "Add client surname to make folder name unique.",
     },
     "ru": {
         "missing_or_invalid_auth_header": "Отсутствует или некорректный заголовок Authorization",
@@ -38,6 +39,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unable_extract_folder_id": "Не удалось извлечь folder_id из folder_url",
         "rate_limit_exceeded": "Превышены лимиты Google API, попробуйте через минуту.",
         "none": "нет",
+        "folder_name_single_word": "Добавьте фамилию клиенту, чтобы сделать название папки уникальной.",
     },
 }
 

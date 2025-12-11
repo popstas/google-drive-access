@@ -3,6 +3,37 @@ from typing import Any, Dict, List
 from googleapiclient.errors import HttpError
 from loguru import logger
 
+from .http_utils import LocalizedError
+
+
+def _is_rate_limit_error(error: HttpError) -> bool:
+    """Check if HttpError is a rate limit error."""
+    # Check status code (rate limit errors are usually 403 or 429)
+    if hasattr(error, "resp") and error.resp.status in [403, 429]:
+        # Check error content for rate limit keywords
+        if hasattr(error, "content"):
+            error_content = (
+                error.content.decode("utf-8")
+                if isinstance(error.content, bytes)
+                else str(error.content)
+            )
+            if (
+                "rateLimitExceeded" in error_content
+                or "userRateLimitExceeded" in error_content
+                or "User rate limit exceeded" in error_content
+            ):
+                return True
+        # Check error_details attribute if available
+        error_details = getattr(error, "error_details", [])
+        if error_details:
+            for detail in error_details:
+                if isinstance(detail, dict) and detail.get("reason") in [
+                    "userRateLimitExceeded",
+                    "rateLimitExceeded",
+                ]:
+                    return True
+    return False
+
 
 class DrivePermissions:
     def __init__(self, service):
@@ -67,6 +98,9 @@ class DrivePermissions:
             logger.error(
                 "Failed to add permission for {} on {}: {}", email, file_id, error
             )
+            # Check if this is a rate limit error
+            if _is_rate_limit_error(error):
+                raise LocalizedError("rate_limit_exceeded") from error
             raise
 
     def ensure_public_permission(self, file_id: str) -> Dict[str, Any]:
@@ -93,4 +127,7 @@ class DrivePermissions:
             )
         except HttpError as error:
             logger.error("Failed to set public permission for {}: {}", file_id, error)
+            # Check if this is a rate limit error
+            if _is_rate_limit_error(error):
+                raise LocalizedError("rate_limit_exceeded") from error
             raise
