@@ -34,6 +34,7 @@ __all__ = [
     "add_user_permission",
     "create_folder",
     "delete_folder",
+    "delete_permission",
     "ensure_public_permission",
     "ensure_public_subdir",
     "find_child_folder",
@@ -127,3 +128,8 @@ def delete_folder(
 ) -> None:
     facade = _with_facade(service)
     return facade.files.delete_folder(folder_id, drive_id)
+
+
+def delete_permission(service, file_id: str, permission_id: str) -> str:
+    facade = _with_facade(service)
+    return facade.permissions.delete_permission(file_id, permission_id)

@@ -12,6 +12,7 @@ from ..model import DriveConfig
 from .compare_files import compare_files_by_location, run_compare_files
 from .delete_empty_folders import delete_empty_folders, run_delete_empty_folders
 from .drive_links_info import drive_links_info, run_drive_links_info
+from .filter_permissions import run_filter_permissions
 from .merge_client_folders import merge_client_folders, run_merge_client_folders
 from .migrate_contact_folders import (
     migrate_contact_folders,
@@ -20,6 +21,7 @@ from .migrate_contact_folders import (
 from .move_from_csv import move_files_from_csv, run_move_files_from_csv
 from .move_to_public import move_files_to_public_folder, run_move_files_to_public_folder
 from .recheck_files import recheck_files_from_drive, run_recheck_files
+from .remove_access import remove_access, run_remove_access
 
 COMMAND_REGISTRY = {
     "move_files_to_public_folder": run_move_files_to_public_folder,
@@ -30,6 +32,8 @@ COMMAND_REGISTRY = {
     "merge_client_folders": run_merge_client_folders,
     "delete_empty_folders": run_delete_empty_folders,
     "drive_links_info": run_drive_links_info,
+    "remove_access": run_remove_access,
+    "filter_permissions": run_filter_permissions,
 }
 
 COMMAND_LOG_FILES = {
@@ -39,7 +43,11 @@ COMMAND_LOG_FILES = {
     "merge_client_folders": "merge_client_folders.log",
     "delete_empty_folders": "delete_empty_folders.log",
     "drive_links_info": "drive_links_info.log",
+    "remove_access": "remove_access.log",
 }
+
+NO_DRIVE_CONFIG_COMMANDS = {"filter_permissions"}
+NO_SERVICE_COMMANDS = {"filter_permissions"}
 
 
 def parse_args() -> argparse.Namespace:
@@ -161,6 +169,41 @@ def parse_args() -> argparse.Namespace:
         help=f"Cache timeout in seconds (default: {DEFAULT_FOLDER_METADATA_CACHE_TIMEOUT})",
     )
 
+    remove_access_parser = subparsers.add_parser(
+        "remove_access",
+        help="Remove root (non-inherited) permissions from files based on CSV data",
+    )
+    remove_access_parser.add_argument(
+        "--csv-file",
+        default="data/remove-access.csv",
+        help="Path to CSV file with permissions to remove (default: data/remove-access.csv)",
+    )
+    remove_access_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show actions without deleting permissions",
+    )
+
+    filter_permissions_parser = subparsers.add_parser(
+        "filter_permissions",
+        help="Filter permissions.csv by permission_email and save matching rows to a new CSV",
+    )
+    filter_permissions_parser.add_argument(
+        "--emails",
+        required=True,
+        help="Comma-separated list of permission emails to keep (e.g. a@x.com,b@y.com)",
+    )
+    filter_permissions_parser.add_argument(
+        "--csv-file",
+        default="data/permissions.csv",
+        help="Input permissions CSV path (default: data/permissions.csv)",
+    )
+    filter_permissions_parser.add_argument(
+        "--csv-save",
+        required=True,
+        help="Output CSV path for filtered rows",
+    )
+
     return parser.parse_args()
 
 
@@ -186,8 +229,16 @@ def main() -> None:
 
     logger.info("Loading configuration from {}", args.config)
 
-    drive_config = DriveConfig.from_dict(config_data)
-    service = get_service(drive_config)
+    drive_config = None
+    service = None
+
+    if args.command not in NO_DRIVE_CONFIG_COMMANDS:
+        drive_config = DriveConfig.from_dict(config_data)
+
+    if args.command not in NO_SERVICE_COMMANDS:
+        if drive_config is None:
+            drive_config = DriveConfig.from_dict(config_data)
+        service = get_service(drive_config)
 
     handler = COMMAND_REGISTRY.get(args.command)
     if handler is None:
@@ -207,6 +258,8 @@ __all__ = [
     "move_files_to_public_folder",
     "parse_args",
     "recheck_files_from_drive",
+    "remove_access",
+    "run_filter_permissions",
 ]
 
 

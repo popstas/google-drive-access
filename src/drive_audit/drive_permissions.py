@@ -131,3 +131,47 @@ class DrivePermissions:
             if _is_rate_limit_error(error):
                 raise LocalizedError("rate_limit_exceeded") from error
             raise
+
+    def delete_permission(self, file_id: str, permission_id: str) -> str:
+        """
+        Delete a permission from a file.
+
+        Args:
+            file_id: The ID of the file
+            permission_id: The ID of the permission to delete
+
+        Returns:
+            "deleted" if successfully deleted, "not_found" if permission not found (404),
+            raises exception for other errors
+
+        Raises:
+            HttpError: If the deletion fails (except 404 which returns "not_found")
+            LocalizedError: If rate limit is exceeded
+        """
+        try:
+            self._service.permissions().delete(
+                fileId=file_id,
+                permissionId=permission_id,
+                supportsAllDrives=True,
+            ).execute()
+            logger.debug("Deleted permission {} from file {}", permission_id, file_id)
+            return "deleted"
+        except HttpError as error:
+            # Handle 404 (permission not found) gracefully - it might already be deleted
+            if hasattr(error, "resp") and error.resp.status == 404:
+                logger.warning(
+                    "Permission {} not found on file {} (may already be deleted)",
+                    permission_id,
+                    file_id,
+                )
+                return "not_found"
+            logger.error(
+                "Failed to delete permission {} from file {}: {}",
+                permission_id,
+                file_id,
+                error,
+            )
+            # Check if this is a rate limit error
+            if _is_rate_limit_error(error):
+                raise LocalizedError("rate_limit_exceeded") from error
+            raise

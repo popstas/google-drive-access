@@ -229,6 +229,27 @@ python -m drive_audit.commands --config data/config.yml drive_links_info \
 
 All arguments are optional and have default values as shown above. Set `--cache-timeout 0` to disable caching.
 
+### filter_permissions
+
+Filter an exported `permissions.csv` by exact `permission_email` matches and write the matching rows to a new CSV. This is a local operation and does not call the Google Drive API.
+
+Run the command:
+
+```bash
+python -m drive_audit.commands filter_permissions \
+  --emails email@host1.com,email2@example.com \
+  --csv-save data/filtered.csv
+```
+
+Optional input override:
+
+```bash
+python -m drive_audit.commands filter_permissions \
+  --emails email@host1.com,email2@example.com \
+  --csv-file data/permissions.csv \
+  --csv-save data/filtered.csv
+```
+
 ## Testing and coverage
 
 Install test dependencies with the optional `test` extras and run pytest with coverage enabled:
