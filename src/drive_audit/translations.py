@@ -36,7 +36,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "client_folder_exists": "Папка клиента уже существует: {folder_url}",
         "folder_created": "Папка {folder_name} создана. {details}. {folder_url}",
         "not_found": "Не найдено",
-        "unable_extract_folder_id": "Не удалось извлечь folder_id из folder_url",
+        "unable_extract_folder_id": "Не удалось извлечь folder_id из folder_url. Это значит, что в поле папки клиента вписана ссылка на документ. Удалите ссылку и нажмите кнопку \"Создать GDrive\". Либо впишите ссылку на папку клиента вручную. Ссылки на документы можно указывать в поле дополнительной информации.",
         "rate_limit_exceeded": "Превышены лимиты Google API, попробуйте через минуту.",
         "none": "нет",
         "folder_name_single_word": "Добавьте фамилию клиенту, чтобы сделать название папки уникальной.",
