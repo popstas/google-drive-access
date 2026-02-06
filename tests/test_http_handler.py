@@ -2,7 +2,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from drive_audit.http_handler import create_handler
+from drive_audit.http import create_client_folder as create_client_folder_route
+from drive_audit.http import create_handler
+from drive_audit.http import set_client_folder_access as set_client_folder_access_route
 from drive_audit.http_utils import LocalizedError
 from drive_audit.model import DriveConfig, HttpConfig
 
@@ -65,7 +67,14 @@ def test_set_client_folder_access_missing_fields(
 
     handler.translate = lambda key, **context: f"translated:{key}:{context}"  # type: ignore
 
-    handler._handle_set_client_folder_access({"contact_id": 1})  # type: ignore
+    set_client_folder_access_route.handle(
+        handler,
+        {"contact_id": 1},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+    )
 
     assert handler.responses[0][0] == 200
     assert handler.responses[0][1]["answer"].startswith("translated:missing_fields")
@@ -81,21 +90,29 @@ def test_create_client_folder_existing(monkeypatch, drive_config, http_config):
         return 123, [1, 2]
 
     monkeypatch.setattr(
-        "drive_audit.http_handler.get_task_and_assignees", fake_get_task_and_assignees
+        "drive_audit.http.create_client_folder.get_task_and_assignees",
+        fake_get_task_and_assignees,
     )
     monkeypatch.setattr(
-        "drive_audit.http_handler.create_client_folder",
+        "drive_audit.http.create_client_folder.create_client_folder",
         lambda service, cfg, name: ({"id": "folder123"}, False),
     )
 
     monkeypatch.setattr(
-        "drive_audit.http_handler.grant_access",
+        "drive_audit.http.create_client_folder.grant_access",
         lambda *args, **kwargs: {"granted_accounts": [], "existing_accounts": []},
     )
 
     handler.translate = lambda key, **context: f"translated:{key}:{context}"  # type: ignore
 
-    handler._handle_create_client_folder({"contact_id": 5, "folder_name": "Client"})  # type: ignore
+    create_client_folder_route.handle(
+        handler,
+        {"contact_id": 5, "folder_name": "Client"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+    )
 
     status, payload = handler.responses[0]
     assert status == 200
@@ -110,20 +127,32 @@ def test_set_client_folder_access_task_and_assignee(
     handler = build_handler(planfix_client, service, http_config, drive_config)
 
     monkeypatch.setattr(
-        "drive_audit.http_handler.extract_folder_id", lambda url: "folder-xyz"
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "folder-xyz",
     )
 
     def fake_normalize(ids):
         raise LocalizedError("client_task_not_found")
 
     monkeypatch.setattr(
-        "drive_audit.http_handler.normalize_assignee_ids", fake_normalize
+        "drive_audit.http.set_client_folder_access.normalize_assignee_ids",
+        fake_normalize,
     )
 
     handler.translate = lambda key, **context: f"translated:{key}:{context}"  # type: ignore
 
-    handler._handle_set_client_folder_access(
-        {"contact_id": 2, "folder_url": "http://example", "task_id": 1, "assignee_id": "1"}  # type: ignore
+    set_client_folder_access_route.handle(
+        handler,
+        {
+            "contact_id": 2,
+            "folder_url": "http://example",
+            "task_id": 1,
+            "assignee_id": "1",
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
     )
 
     status, payload = handler.responses[0]

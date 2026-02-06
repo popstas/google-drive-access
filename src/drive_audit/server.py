@@ -6,7 +6,7 @@ from loguru import logger
 
 from .config_loader import build_http_config, build_planfix_config, load_config
 from .google_client import get_service
-from .http_handler import create_handler
+from .http import create_handler
 from .logger_config import configure_logger
 from .model import DriveConfig
 from .planfix_client import PlanfixClient
