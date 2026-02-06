@@ -38,18 +38,6 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
             planfix_client, contact_id
         )
         folder, created = create_client_folder(service, drive_config, folder_name)
-        if not created:
-            folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
-            answer_text = (
-                handler.translate("client_folder_exists", folder_url=folder_url)
-                + name_warning
-            )
-            handler.send_json(
-                200,
-                {"answer": answer_text},
-            )
-            return
-
         access_report = grant_access(
             planfix_client,
             service,
@@ -75,15 +63,25 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
         existing=handler._format_accounts(existing_accounts),
     )
     folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
-    answer_text = (
-        handler.translate(
-            "folder_created",
-            folder_name=folder_name,
-            details=answer,
-            folder_url=folder_url,
+    if created:
+        answer_text = (
+            handler.translate(
+                "folder_created",
+                folder_name=folder_name,
+                details=answer,
+                folder_url=folder_url,
+            )
+            + name_warning
         )
-        + name_warning
-    )
+    else:
+        answer_text = (
+            handler.translate(
+                "client_folder_exists",
+                folder_url=folder_url,
+                details=answer,
+            )
+            + name_warning
+        )
     handler.send_json(
         200,
         {
