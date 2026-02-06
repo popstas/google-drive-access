@@ -4,7 +4,12 @@ from pathlib import Path
 
 from loguru import logger
 
-from .config_loader import build_http_config, build_planfix_config, load_config
+from .config_loader import (
+    build_http_config,
+    build_planfix_config,
+    build_share_file_config,
+    load_config,
+)
 from .google_client import get_service
 from .http import create_handler
 from .logger_config import configure_logger
@@ -34,13 +39,19 @@ def main() -> None:
     planfix_config = build_planfix_config(config_data)
     http_config = build_http_config(config_data)
     drive_config = DriveConfig.from_dict(config_data)
+    share_file_config = build_share_file_config(config_data)
 
     logger.info("Initializing Google Drive service")
     service = get_service(drive_config)
     planfix_client = PlanfixClient(planfix_config)
 
     handler = create_handler(
-        planfix_client, service, http_config, drive_config, planfix_config.role
+        planfix_client,
+        service,
+        http_config,
+        drive_config,
+        planfix_config.role,
+        share_file_config=share_file_config,
     )
     server = HTTPServer(("", http_config.port), handler)
     logger.info("Starting HTTP server on port {}", http_config.port)

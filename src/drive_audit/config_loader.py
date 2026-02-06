@@ -4,7 +4,7 @@ from typing import Any, Dict
 
 import yaml
 
-from .model import HttpConfig, PlanfixConfig, PlanfixEndpointConfig
+from .model import HttpConfig, PlanfixConfig, PlanfixEndpointConfig, ShareFileConfig
 from .translations import TRANSLATIONS
 
 
@@ -36,6 +36,14 @@ def build_planfix_config(config_data: Dict[str, Any]) -> PlanfixConfig:
         ),
         role=planfix_section["role"],
         timeout=int(planfix_section.get("timeout", 120)),
+    )
+
+
+def build_share_file_config(config_data: Dict[str, Any]) -> ShareFileConfig:
+    section = config_data.get("share_file", {})
+    return ShareFileConfig(
+        days=int(section.get("days", 90)),
+        role=str(section.get("role", "commenter")),
     )
 
 

@@ -57,7 +57,7 @@ isort src tests
 - `drive_permissions.py` - Permission retrieval and management
 - `scanner.py` - Main logic: builds file tree, resolves paths, applies policies
 - `policy.py` - Policy enforcement: detects public files outside public folders
-- `access_service.py` - Creates folders, grants access, Planfix integration
+- `access_service.py` - Creates folders, grants access, URL ID extraction, Planfix integration
 - `http/` - HTTP route handlers package (see `src/drive_audit/http/AGENTS.md`)
 - `http_utils.py` - Shared HTTP utilities (JsonRequestHandler, LocalizedError) — used by both http/ and non-HTTP modules
 
@@ -94,6 +94,7 @@ When modifying compare logic:
 
 - **Adding a new HTTP route:** Create module in `src/drive_audit/http/`, wire in `handler.py` `do_POST` (see `src/drive_audit/http/AGENTS.md`)
 - **Adding a new command:** Create module in `src/drive_audit/commands/`, register in `__init__.py`
-- **Adding translations:** Update `src/drive_audit/translations.py`
+- **Adding translations:** Update `src/drive_audit/translations.py` (both `en` and `ru` sections)
 - **Modifying policies:** Edit `src/drive_audit/policy.py`
-- **Configuration options:** `src/drive_audit/config_loader.py` and `config.example.yml`
+- **Configuration options:** Add dataclass to `model.py`, builder to `config_loader.py`, load in `server.py`, document in `config.example.yml`
+- **Adding Google API operations:** Add method to `drive_files.py` or `drive_permissions.py`, then add facade wrapper in `google_client.py` and update its `__all__`

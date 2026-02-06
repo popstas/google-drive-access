@@ -42,11 +42,19 @@ def test_server_main(monkeypatch, tmp_path):
     )
     monkeypatch.setattr(server, "get_service", lambda cfg: SimpleNamespace())
     monkeypatch.setattr(server, "PlanfixClient", lambda cfg: SimpleNamespace())
+    monkeypatch.setattr(
+        server,
+        "build_share_file_config",
+        lambda cfg: SimpleNamespace(days=90, role="commenter"),
+    )
 
     created_handlers = {}
 
-    def fake_create_handler(planfix_client, service, http_cfg, drive_cfg, role):
+    def fake_create_handler(
+        planfix_client, service, http_cfg, drive_cfg, role, **kwargs
+    ):
         created_handlers["args"] = (planfix_client, service, http_cfg, drive_cfg, role)
+        created_handlers["kwargs"] = kwargs
         return lambda *a, **kw: None
 
     monkeypatch.setattr(server, "create_handler", fake_create_handler)

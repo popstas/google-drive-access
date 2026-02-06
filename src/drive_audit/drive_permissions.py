@@ -103,6 +103,31 @@ class DrivePermissions:
                 raise LocalizedError("rate_limit_exceeded") from error
             raise
 
+    def create_anyone_permission(
+        self, file_id: str, role: str, expiration_time: str = None
+    ) -> Dict[str, Any]:
+        body: Dict[str, Any] = {"type": "anyone", "role": role}
+        if expiration_time:
+            body["expirationTime"] = expiration_time
+        try:
+            return (
+                self._service.permissions()
+                .create(
+                    fileId=file_id,
+                    supportsAllDrives=True,
+                    sendNotificationEmail=False,
+                    body=body,
+                )
+                .execute()
+            )
+        except HttpError as error:
+            logger.error(
+                "Failed to create anyone permission for {}: {}", file_id, error
+            )
+            if _is_rate_limit_error(error):
+                raise LocalizedError("rate_limit_exceeded") from error
+            raise
+
     def ensure_public_permission(self, file_id: str) -> Dict[str, Any]:
         permissions = self.get_file_permissions(file_id)
         for permission in permissions:

@@ -49,6 +49,13 @@ class DriveFiles:
 
         return {"corpora": "user"}
 
+    def get_file_metadata(self, file_id: str) -> Dict[str, Any]:
+        return (
+            self._service.files()
+            .get(fileId=file_id, supportsAllDrives=True, fields="id, name, driveId")
+            .execute()
+        )
+
     def list_files(
         self, drive_id: str, page_size: int = 1000, limit: Optional[int] = None
     ) -> Generator[Dict[str, Any], None, None]:

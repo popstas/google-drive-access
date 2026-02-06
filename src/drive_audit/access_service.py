@@ -20,6 +20,22 @@ from .model import DriveConfig
 from .planfix_client import PlanfixClient
 
 
+def extract_file_id(document_url: str) -> str:
+    parsed = urlparse(document_url)
+    query_params = parse_qs(parsed.query)
+    if "id" in query_params and query_params["id"]:
+        return query_params["id"][0]
+
+    match = re.search(
+        r"/(?:document|spreadsheets|presentation|file|folders)/d?/?([A-Za-z0-9_-]+)",
+        parsed.path,
+    )
+    if match:
+        return match.group(1)
+
+    raise LocalizedError("unable_extract_file_id")
+
+
 def extract_folder_id(folder_url: str) -> str:
     parsed = urlparse(folder_url)
     query_params = parse_qs(parsed.query)

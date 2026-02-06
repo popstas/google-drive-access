@@ -4,6 +4,12 @@ from typing import Any, Dict, List, Optional
 
 
 @dataclass
+class ShareFileConfig:
+    days: int
+    role: str
+
+
+@dataclass
 class PlanfixEndpointConfig:
     url: str
     token: str

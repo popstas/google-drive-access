@@ -61,6 +61,10 @@ planfix:
   role: "writer"
   timeout: 120  # Request timeout in seconds
 
+share_file:
+  days: 90   # 0 - never expire
+  role: commenter
+
 http:
   port: 7587
   token: skldjfh

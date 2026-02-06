@@ -32,6 +32,7 @@ __all__ = [
     "DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT",
     "DriveConfig",
     "add_user_permission",
+    "create_anyone_permission",
     "create_folder",
     "delete_folder",
     "delete_permission",
@@ -39,6 +40,7 @@ __all__ = [
     "ensure_public_subdir",
     "find_child_folder",
     "get_drive_info",
+    "get_file_metadata",
     "get_file_permissions",
     "get_service",
     "list_files",
@@ -133,3 +135,15 @@ def delete_folder(
 def delete_permission(service, file_id: str, permission_id: str) -> str:
     facade = _with_facade(service)
     return facade.permissions.delete_permission(file_id, permission_id)
+
+
+def get_file_metadata(service, file_id: str) -> Dict[str, Any]:
+    facade = _with_facade(service)
+    return facade.files.get_file_metadata(file_id)
+
+
+def create_anyone_permission(
+    service, file_id: str, role: str, expiration_time: str = None
+) -> Dict[str, Any]:
+    facade = _with_facade(service)
+    return facade.permissions.create_anyone_permission(file_id, role, expiration_time)
