@@ -6,7 +6,11 @@ from googleapiclient.errors import HttpError
 from loguru import logger
 
 from ..access_service import extract_file_id
-from ..google_client import create_anyone_permission, get_file_metadata
+from ..google_client import (
+    create_anyone_permission,
+    get_file_metadata,
+    get_file_permissions,
+)
 from ..http_utils import LocalizedError
 
 
@@ -41,6 +45,22 @@ def handle(handler, payload, *, service, drive_config, share_file_config):
         if metadata.get("driveId") != drive_config.drive_id:
             handler.send_json(
                 200, {"answer": handler.translate("share_file_outside_drive")}
+            )
+            return
+
+        permissions = get_file_permissions(service, file_id)
+        anyone_perm = next(
+            (p for p in permissions if p.get("type") == "anyone"), None
+        )
+        if anyone_perm:
+            handler.send_json(
+                200,
+                {
+                    "answer": handler.translate(
+                        "share_file_already_shared",
+                        role=anyone_perm.get("role", "unknown"),
+                    )
+                },
             )
             return
 

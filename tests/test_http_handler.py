@@ -302,6 +302,10 @@ def test_share_file_success_with_days(
         lambda svc, fid: {"id": "file123", "name": "Test", "driveId": "drive"},
     )
     monkeypatch.setattr(
+        "drive_audit.http.share_file.get_file_permissions",
+        lambda svc, fid: [],
+    )
+    monkeypatch.setattr(
         "drive_audit.http.share_file.create_anyone_permission",
         lambda svc, fid, role, exp: {"id": "perm1"},
     )
@@ -336,6 +340,11 @@ def test_share_file_success_no_expiration(
         lambda svc, fid: {"id": "file123", "name": "Test", "driveId": "drive"},
     )
 
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.get_file_permissions",
+        lambda svc, fid: [],
+    )
+
     created_perms = []
 
     def fake_create(svc, fid, role, exp):
@@ -359,3 +368,35 @@ def test_share_file_success_no_expiration(
     assert status == 200
     assert "share_file_shared_no_expire" in payload["answer"]
     assert created_perms[0]["exp"] is None
+
+
+def test_share_file_already_shared(
+    monkeypatch, drive_config, http_config, share_file_config
+):
+    handler, service = _make_stub_handler(http_config, drive_config)
+
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.extract_file_id",
+        lambda url: "file123",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.get_file_metadata",
+        lambda svc, fid: {"id": "file123", "name": "Test", "driveId": "drive"},
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.get_file_permissions",
+        lambda svc, fid: [{"type": "anyone", "role": "reader"}],
+    )
+
+    share_file_route.handle(
+        handler,
+        {"document_url": "https://docs.google.com/document/d/file123/edit"},
+        service=service,
+        drive_config=drive_config,
+        share_file_config=share_file_config,
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "share_file_already_shared" in payload["answer"]
+    assert "reader" in payload["answer"]
