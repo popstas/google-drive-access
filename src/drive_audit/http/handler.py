@@ -8,7 +8,6 @@ from loguru import logger
 from ..http_utils import JsonRequestHandler, LocalizedError
 from ..model import DriveConfig, HttpConfig
 from ..planfix_client import PlanfixClient
-from ..translations import translate
 from . import create_client_folder as create_client_folder_route
 from . import set_client_folder_access as set_client_folder_access_route
 from . import share_file as share_file_route
@@ -106,6 +105,6 @@ def create_handler(
                 )
                 return
 
-            self.send_json(200, {"answer": translate(language, "not_found")})
+            self.send_json(200, {"answer": self.translate("not_found")})
 
     return AccessHandler
