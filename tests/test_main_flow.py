@@ -9,8 +9,7 @@ from drive_audit import main as audit_main
 def test_main_success(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     output_dir = tmp_path / "output"
-    config_path.write_text(
-        """
+    config_path.write_text("""
 logLevel: INFO
 drive:
   id: drive-id
@@ -27,10 +26,7 @@ output:
   yaml_file: data.yml
   files_csv: files.csv
   permissions_csv: perms.csv
-""".format(
-            output_dir=output_dir
-        )
-    )
+""".format(output_dir=output_dir))
 
     monkeypatch.setattr(audit_main, "get_service", lambda cfg: SimpleNamespace())
     monkeypatch.setattr(
@@ -91,8 +87,7 @@ def test_main_missing_config(monkeypatch, tmp_path):
 def test_main_skips_permissions_when_disabled(monkeypatch, tmp_path):
     config_path = tmp_path / "config.yml"
     output_dir = tmp_path / "output"
-    config_path.write_text(
-        """
+    config_path.write_text("""
 logLevel: INFO
 drive:
   id: drive-id
@@ -109,10 +104,7 @@ output:
   yaml_file: data.yml
   files_csv: files.csv
   permissions_csv: perms.csv
-""".format(
-            output_dir=output_dir
-        )
-    )
+""".format(output_dir=output_dir))
 
     monkeypatch.setattr(audit_main, "get_service", lambda cfg: SimpleNamespace())
     monkeypatch.setattr(
