@@ -154,6 +154,7 @@ def grant_access(
     task_id: int,
     initial_assignee_ids: List[str],
     folder_id: str,
+    email: str = None,
 ) -> Dict[str, List[str]]:
     if drive_config.public_subdir:
         ensure_public_subdir(
@@ -163,9 +164,12 @@ def grant_access(
             drive_config.drive_id,
         )
 
-    tasks = planfix_client.get_child_tasks(task_id)
-    assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
-    google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
+    if email:
+        google_accounts = [email]
+    else:
+        tasks = planfix_client.get_child_tasks(task_id)
+        assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)
+        google_accounts = collect_google_accounts(planfix_client, sorted(assignee_ids))
     existing_accounts = collect_existing_user_accounts(drive_service, folder_id)
     existing_accounts_set = set(existing_accounts)
 

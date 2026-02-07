@@ -400,3 +400,125 @@ def test_share_file_already_shared(
     assert status == 200
     assert "share_file_already_shared" in payload["answer"]
     assert "reader" in payload["answer"]
+
+
+# --- set_client_folder_access email tests ---
+
+
+def test_set_client_folder_access_email_skips_planfix(
+    monkeypatch, drive_config, http_config
+):
+    """When email is provided, grant_access is called with email kwarg and
+    task/assignee Planfix logic is skipped entirely."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "folder-abc",
+    )
+
+    grant_access_calls = []
+
+    def fake_grant_access(*args, **kwargs):
+        grant_access_calls.append((args, kwargs))
+        return {"granted_accounts": ["user@example.com"], "existing_accounts": []}
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        fake_grant_access,
+    )
+
+    # get_task_and_assignees should NOT be called
+    def fail_get_task(*args, **kwargs):
+        raise AssertionError("get_task_and_assignees should not be called")
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.get_task_and_assignees",
+        fail_get_task,
+    )
+
+    set_client_folder_access_route.handle(
+        handler,
+        {
+            "contact_id": 10,
+            "folder_url": "https://drive.google.com/drive/folders/folder-abc",
+            "email": "user@example.com",
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+    )
+
+    assert len(grant_access_calls) == 1
+    _, kwargs = grant_access_calls[0]
+    assert kwargs["email"] == "user@example.com"
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "granted_existing" in payload["answer"]
+
+
+def test_set_client_folder_access_email_takes_precedence(
+    monkeypatch, drive_config, http_config
+):
+    """When email is provided alongside task_id/assignee_id, email takes
+    precedence and task/assignee logic is skipped."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "folder-xyz",
+    )
+
+    grant_access_calls = []
+
+    def fake_grant_access(*args, **kwargs):
+        grant_access_calls.append((args, kwargs))
+        return {"granted_accounts": ["boss@example.com"], "existing_accounts": []}
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        fake_grant_access,
+    )
+
+    # normalize_assignee_ids should NOT be called when email is present
+    def fail_normalize(*args, **kwargs):
+        raise AssertionError("normalize_assignee_ids should not be called")
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.normalize_assignee_ids",
+        fail_normalize,
+    )
+
+    set_client_folder_access_route.handle(
+        handler,
+        {
+            "contact_id": 20,
+            "folder_url": "https://drive.google.com/drive/folders/folder-xyz",
+            "email": "boss@example.com",
+            "task_id": 99,
+            "assignee_id": "42",
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="writer",
+    )
+
+    assert len(grant_access_calls) == 1
+    args, kwargs = grant_access_calls[0]
+    assert kwargs["email"] == "boss@example.com"
+    # task_id and initial_assignee_ids should be dummy values
+    assert args[4] == 0  # task_id
+    assert args[5] == []  # initial_assignee_ids
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "granted_existing" in payload["answer"]

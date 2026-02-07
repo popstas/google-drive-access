@@ -33,24 +33,30 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
         contact_id = int(payload["contact_id"])
         folder_id = extract_folder_id(str(payload["folder_url"]))
 
-        has_task_id = "task_id" in payload
-        has_assignee_id = "assignee_id" in payload
+        email = payload.get("email")
 
-        if has_task_id and has_assignee_id:
-            task_id = int(payload["task_id"])
-            initial_assignee_ids = normalize_assignee_ids(
-                parse_assignee_ids(payload["assignee_id"])
-            )
-        elif not has_task_id and not has_assignee_id:
-            task_id, initial_assignee_ids = get_task_and_assignees(
-                planfix_client, contact_id
-            )
+        if email:
+            task_id = 0
+            initial_assignee_ids = []
         else:
-            handler.send_json(
-                200,
-                {"answer": handler.translate("task_and_assignee_together")},
-            )
-            return
+            has_task_id = "task_id" in payload
+            has_assignee_id = "assignee_id" in payload
+
+            if has_task_id and has_assignee_id:
+                task_id = int(payload["task_id"])
+                initial_assignee_ids = normalize_assignee_ids(
+                    parse_assignee_ids(payload["assignee_id"])
+                )
+            elif not has_task_id and not has_assignee_id:
+                task_id, initial_assignee_ids = get_task_and_assignees(
+                    planfix_client, contact_id
+                )
+            else:
+                handler.send_json(
+                    200,
+                    {"answer": handler.translate("task_and_assignee_together")},
+                )
+                return
 
         access_report = grant_access(
             planfix_client,
@@ -60,6 +66,7 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
             task_id,
             initial_assignee_ids,
             folder_id,
+            email=email,
         )
     except LocalizedError as exc:
         handler.send_json(200, {"answer": handler.translate(exc.key, **exc.context)})
