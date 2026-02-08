@@ -34,6 +34,8 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
         folder_id = extract_folder_id(str(payload["folder_url"]))
 
         email = payload.get("email")
+        if isinstance(email, list):
+            email = email[0] if email else None
 
         if email:
             task_id = 0
