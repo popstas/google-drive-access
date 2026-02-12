@@ -80,15 +80,18 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
 
     granted_accounts = access_report["granted_accounts"]
     existing_accounts = access_report["existing_accounts"]
+    folder_url = str(payload["folder_url"])
     answer = handler.translate(
         "granted_existing",
         granted=handler._format_accounts(granted_accounts),
         existing=handler._format_accounts(existing_accounts),
+        folder_url=folder_url,
     )
     handler.send_json(
         200,
         {
             "answer": answer,
+            "folder_url": folder_url,
             "granted_accounts": granted_accounts,
             "existing_accounts": existing_accounts,
         },

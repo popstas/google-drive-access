@@ -57,12 +57,13 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
 
     granted_accounts = access_report["granted_accounts"]
     existing_accounts = access_report["existing_accounts"]
+    folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
     answer = handler.translate(
         "granted_existing",
         granted=handler._format_accounts(granted_accounts),
         existing=handler._format_accounts(existing_accounts),
+        folder_url=folder_url,
     )
-    folder_url = f"https://drive.google.com/drive/folders/{folder['id']}"
     if created:
         answer_text = (
             handler.translate(

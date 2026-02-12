@@ -49,6 +49,8 @@ def create_handler(
                     )
                     return
 
+                if "lang" in payload:
+                    self.language = payload["lang"]
                 self._log_request(payload)
                 set_client_folder_access_route.handle(
                     self,
@@ -72,6 +74,8 @@ def create_handler(
                     )
                     return
 
+                if "lang" in payload:
+                    self.language = payload["lang"]
                 self._log_request(payload)
                 create_client_folder_route.handle(
                     self,
@@ -95,6 +99,8 @@ def create_handler(
                     )
                     return
 
+                if "lang" in payload:
+                    self.language = payload["lang"]
                 self._log_request(payload)
                 share_file_route.handle(
                     self,

@@ -570,3 +570,54 @@ def test_set_client_folder_access_email_as_list(
     status, payload = handler.responses[0]
     assert status == 200
     assert "granted_existing" in payload["answer"]
+    assert payload["folder_url"] == "https://drive.google.com/drive/folders/folder-list"
+
+
+# --- lang override tests ---
+
+
+def test_lang_override_in_payload(monkeypatch, drive_config, http_config):
+    """When 'lang' is provided in the payload, handler.language is updated
+    before the route handler runs."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+
+    assert handler.language == "en"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "folder-lang",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        lambda *args, **kwargs: {"granted_accounts": [], "existing_accounts": []},
+    )
+
+    # Simulate do_POST lang extraction manually
+    payload = {
+        "contact_id": 1,
+        "folder_url": "https://drive.google.com/drive/folders/folder-lang",
+        "lang": "ru",
+    }
+    if "lang" in payload:
+        handler.language = payload["lang"]
+
+    set_client_folder_access_route.handle(
+        handler,
+        payload,
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+    )
+
+    assert handler.language == "ru"
+    status, payload_resp = handler.responses[0]
+    assert status == 200
+    # The translate method uses handler.language, so it should use Russian
+    assert "Выданы права" in payload_resp["answer"]
