@@ -598,14 +598,13 @@ def test_lang_override_in_payload(monkeypatch, drive_config, http_config):
         lambda *args, **kwargs: {"granted_accounts": [], "existing_accounts": []},
     )
 
-    # Simulate do_POST lang extraction manually
+    # Simulate do_POST lang extraction (list + uppercase like Planfix sends)
     payload = {
         "contact_id": 1,
         "folder_url": "https://drive.google.com/drive/folders/folder-lang",
-        "lang": "ru",
+        "lang": ["Ru"],
     }
-    if "lang" in payload:
-        handler.language = payload["lang"]
+    handler._apply_lang(payload)
 
     set_client_folder_access_route.handle(
         handler,

@@ -33,6 +33,17 @@ def create_handler(
                 "{} request: {}", self.path, json.dumps(payload, ensure_ascii=False)
             )
 
+        def _apply_lang(self, payload: Dict[str, Any]) -> None:
+            if "lang" not in payload:
+                return
+            lang = payload["lang"]
+            if isinstance(lang, list):
+                lang = lang[0] if lang else None
+            if isinstance(lang, str):
+                lang = lang.lower()
+            if lang in ("ru", "en"):
+                self.language = lang
+
         def _format_accounts(self, accounts: List[str]) -> str:
             return ", ".join(accounts) if accounts else self.translate("none")
 
@@ -49,8 +60,7 @@ def create_handler(
                     )
                     return
 
-                if "lang" in payload:
-                    self.language = payload["lang"]
+                self._apply_lang(payload)
                 self._log_request(payload)
                 set_client_folder_access_route.handle(
                     self,
@@ -74,8 +84,7 @@ def create_handler(
                     )
                     return
 
-                if "lang" in payload:
-                    self.language = payload["lang"]
+                self._apply_lang(payload)
                 self._log_request(payload)
                 create_client_folder_route.handle(
                     self,
@@ -99,8 +108,7 @@ def create_handler(
                     )
                     return
 
-                if "lang" in payload:
-                    self.language = payload["lang"]
+                self._apply_lang(payload)
                 self._log_request(payload)
                 share_file_route.handle(
                     self,
