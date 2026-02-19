@@ -10,6 +10,7 @@ from ..model import DriveConfig, HttpConfig
 from ..planfix_client import PlanfixClient
 from . import create_client_folder as create_client_folder_route
 from . import set_client_folder_access as set_client_folder_access_route
+from . import set_client_subfolder_writer as set_client_subfolder_writer_route
 from . import share_file as share_file_route
 
 
@@ -87,6 +88,30 @@ def create_handler(
                 self._apply_lang(payload)
                 self._log_request(payload)
                 create_client_folder_route.handle(
+                    self,
+                    payload,
+                    planfix_client=planfix_client,
+                    service=service,
+                    drive_config=drive_config,
+                    role=role,
+                )
+                return
+
+            if self.path == "/set_client_subfolder_writer":
+                if not self.authenticate():
+                    return
+
+                try:
+                    payload = self.parse_json_body()
+                except LocalizedError as exc:
+                    self.send_json(
+                        200, {"answer": self.translate(exc.key, **exc.context)}
+                    )
+                    return
+
+                self._apply_lang(payload)
+                self._log_request(payload)
+                set_client_subfolder_writer_route.handle(
                     self,
                     payload,
                     planfix_client=planfix_client,

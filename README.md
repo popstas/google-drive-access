@@ -61,6 +61,7 @@ drive:
   id: "0AGx8QKiHWRvbUk9PVA"
   root_folder_id: "ROOT_FOLDER_ID" # Defaults to drive_id if not specified
   root_folder_name: "Clients"
+  writer_subdir: ""   # subfolder to grant writer access via /set_client_subfolder_writer
 
 scan:
   include_trashed: false
@@ -116,6 +117,8 @@ http:
 Set `collect_permissions` to `false` if you only need the file list and want to skip fetching sharing permissions to reduce API calls. Permissions exports will be empty when collection is disabled.
 
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
+
+Set `drive.writer_subdir` to the name of a subfolder inside each client folder that `/set_client_subfolder_writer` should grant writer access to. The subfolder must already exist — the endpoint does not create it.
 
 Folder child listings are cached per folder for `cache_timeouts.list_folder_children` seconds (default 1 hour) to reduce repeated API calls. The cache is cleared automatically after files are moved between folders. Set the timeout to `0` to disable caching.
 
@@ -271,6 +274,12 @@ The HTTP server (see `src/drive_audit/server.py`) exposes authenticated endpoint
 - `POST /create_client_folder` — Creates a client folder and applies access based on the client's Planfix task.
   - Body fields: `contact_id`, `folder_name`.
   - Behavior: looks up the client's task via `planfix.getClientTask`. If no task is found, returns `"Client task not found"`. If a folder with the same name already exists under the configured root folder, returns `"Folder already exists"`. Otherwise, creates the folder under the configured root folder, ensures the `public_subdir` if configured, and grants access using the task's assignees and child tasks.
+- `POST /set_client_subfolder_writer` — Grants writer access to a named subfolder inside the client folder.
+  - Body fields: `contact_id`, `folder_url`. Optional: `email` (direct grant, skips Planfix lookup), `task_id` + `assignee_id` (override Planfix lookup; both must be provided together), `lang`.
+  - Behavior: requires `drive.writer_subdir` to be set in config. Finds the subfolder by that name inside the folder identified by `folder_url`, verifies it is a direct child folder of the client folder, then grants the configured role to the resolved accounts. The `public_subdir` is not created inside this subfolder.
+  - Error responses: `writer_subdir_not_configured`, `unable_extract_folder_id`, `subfolder_not_found`, `subfolder_not_a_folder`, `subfolder_not_child`.
+
+All `/set_client_folder_access` and `/set_client_subfolder_writer` endpoints accept an optional `lang` field (`"en"` or `"ru"`) to override the server's default response language for that request.
 
 ## Output
 Files are saved to the `output.dir` (default `./data`):

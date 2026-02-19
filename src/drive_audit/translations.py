@@ -27,6 +27,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unable_extract_file_id": "Unable to extract file ID from document_url",
         "none": "none",
         "folder_name_single_word": "Add client surname to make folder name unique.",
+        "writer_subdir_not_configured": "writer_subdir is not configured",
+        "subfolder_not_found": "Subfolder '{name}' not found in folder",
+        "subfolder_not_a_folder": "'{name}' is not a folder",
+        "subfolder_not_child": "Subfolder is not inside the client folder",
     },
     "ru": {
         "missing_or_invalid_auth_header": "Отсутствует или некорректный заголовок Authorization",
@@ -52,6 +56,10 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "unable_extract_file_id": "Не удалось извлечь ID файла из document_url",
         "none": "нет",
         "folder_name_single_word": "Добавьте фамилию клиенту, чтобы сделать название папки уникальной.",
+        "writer_subdir_not_configured": "writer_subdir не настроен",
+        "subfolder_not_found": "Подпапка '{name}' не найдена в папке",
+        "subfolder_not_a_folder": "'{name}' не является папкой",
+        "subfolder_not_child": "Подпапка не находится в папке клиента",
     },
 }
 

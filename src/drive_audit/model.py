@@ -48,6 +48,7 @@ class DriveConfig:
     yaml_file: str
     files_csv: str
     permissions_csv: str
+    writer_subdir: Optional[str] = None
     collect_permissions: bool = True
     list_folder_children_cache_timeout: int = 3600
 
@@ -83,6 +84,7 @@ class DriveConfig:
             max_depth=scan_section.get("max_depth"),
             limit=scan_section.get("limit"),
             public_subdir=scan_section.get("public_subdir"),
+            writer_subdir=drive_section.get("writer_subdir"),
             collect_permissions=scan_section.get("collect_permissions", True),
             output_dir=output_section.get("dir", "./data"),
             yaml_file=output_section.get("yaml_file", "drive_audit.yml"),

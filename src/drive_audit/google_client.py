@@ -42,6 +42,7 @@ __all__ = [
     "get_drive_info",
     "get_file_metadata",
     "get_file_permissions",
+    "get_item_info",
     "get_service",
     "list_files",
     "list_folder_children",
@@ -140,6 +141,11 @@ def delete_permission(service, file_id: str, permission_id: str) -> str:
 def get_file_metadata(service, file_id: str) -> Dict[str, Any]:
     facade = _with_facade(service)
     return facade.files.get_file_metadata(file_id)
+
+
+def get_item_info(service, item_id: str) -> Dict[str, Any]:
+    facade = _with_facade(service)
+    return facade.files.get_item_info(item_id)
 
 
 def create_anyone_permission(

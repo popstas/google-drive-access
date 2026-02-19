@@ -6,6 +6,7 @@ from drive_audit.access_service import extract_file_id
 from drive_audit.http import create_client_folder as create_client_folder_route
 from drive_audit.http import create_handler
 from drive_audit.http import set_client_folder_access as set_client_folder_access_route
+from drive_audit.http import set_client_subfolder_writer as set_client_subfolder_writer_route
 from drive_audit.http import share_file as share_file_route
 from drive_audit.http_utils import LocalizedError
 from drive_audit.model import DriveConfig, HttpConfig, ShareFileConfig
@@ -620,3 +621,231 @@ def test_lang_override_in_payload(monkeypatch, drive_config, http_config):
     assert status == 200
     # The translate method uses handler.language, so it should use Russian
     assert "Выданы права" in payload_resp["answer"]
+
+
+# --- set_client_subfolder_writer tests ---
+
+
+def _make_subfolder_writer_handler(drive_config, http_config, writer_subdir=None):
+    import dataclasses
+
+    cfg = dataclasses.replace(drive_config, writer_subdir=writer_subdir)
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, cfg)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+    return handler, planfix_client, service, cfg
+
+
+def test_subfolder_writer_missing_fields(drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+
+    set_client_subfolder_writer_route.handle(
+        handler,
+        {"contact_id": 1},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "missing_fields" in payload["answer"]
+
+
+def test_subfolder_writer_not_configured(drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+        drive_config, http_config, writer_subdir=None
+    )
+
+    set_client_subfolder_writer_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "writer_subdir_not_configured" in payload["answer"]
+
+
+def test_subfolder_writer_subfolder_not_found(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        lambda url: "PARENT",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        lambda svc, parent, name, drive: None,
+    )
+
+    set_client_subfolder_writer_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "subfolder_not_found" in payload["answer"]
+
+
+def test_subfolder_writer_not_a_folder(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        lambda url: "PARENT",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        lambda svc, parent, name, drive: {"id": "SUB123", "name": "docs"},
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.get_item_info",
+        lambda svc, item_id: {
+            "id": item_id,
+            "name": "docs",
+            "mimeType": "application/vnd.google-apps.document",
+            "parents": ["PARENT"],
+        },
+    )
+
+    set_client_subfolder_writer_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "subfolder_not_a_folder" in payload["answer"]
+
+
+def test_subfolder_writer_not_child(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        lambda url: "PARENT",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        lambda svc, parent, name, drive: {"id": "SUB123", "name": "docs"},
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.get_item_info",
+        lambda svc, item_id: {
+            "id": item_id,
+            "name": "docs",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["OTHER_PARENT"],
+        },
+    )
+
+    set_client_subfolder_writer_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "subfolder_not_child" in payload["answer"]
+
+
+def test_subfolder_writer_success(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        lambda url: "PARENT",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        lambda client, cid: (42, [1, 2]),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        lambda svc, parent, name, drive: {"id": "SUB123", "name": "docs"},
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.get_item_info",
+        lambda svc, item_id: {
+            "id": item_id,
+            "name": "docs",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["PARENT"],
+        },
+    )
+
+    grant_calls = []
+
+    def fake_grant_access(*args, **kwargs):
+        grant_calls.append((args, kwargs))
+        return {"granted_accounts": ["user@example.com"], "existing_accounts": []}
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_subfolder_writer.grant_access",
+        fake_grant_access,
+    )
+
+    set_client_subfolder_writer_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "granted_existing" in payload["answer"]
+    assert payload["folder_url"] == "https://drive.google.com/drive/folders/SUB123"
+    assert payload["granted_accounts"] == ["user@example.com"]
+    assert payload["existing_accounts"] == []
+
+    # grant_access must be called with public_subdir=None to skip nested public dir
+    _, kwargs = grant_calls[0]
+    assert kwargs.get("folder_id") == "SUB123" or grant_calls[0][0][6] == "SUB123"
+    # The drive_config passed to grant_access must have public_subdir=None
+    passed_cfg = grant_calls[0][0][2]
+    assert passed_cfg.public_subdir is None

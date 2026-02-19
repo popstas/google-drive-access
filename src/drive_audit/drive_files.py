@@ -56,6 +56,17 @@ class DriveFiles:
             .execute()
         )
 
+    def get_item_info(self, item_id: str) -> Dict[str, Any]:
+        return (
+            self._service.files()
+            .get(
+                fileId=item_id,
+                supportsAllDrives=True,
+                fields="id, name, mimeType, parents",
+            )
+            .execute()
+        )
+
     def list_files(
         self, drive_id: str, page_size: int = 1000, limit: Optional[int] = None
     ) -> Generator[Dict[str, Any], None, None]:
