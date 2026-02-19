@@ -1,5 +1,6 @@
 """Route handler for setting client folder access."""
 
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from loguru import logger
@@ -11,10 +12,11 @@ from ..access_service import (
     normalize_assignee_ids,
     parse_assignee_ids,
 )
+from ..google_client import create_anyone_permission
 from ..http_utils import LocalizedError
 
 
-def handle(handler, payload, *, planfix_client, service, drive_config, role):
+def handle(handler, payload, *, planfix_client, service, drive_config, role, share_file_config=None):
     """Handle the /set_client_folder_access route."""
     required_fields = ["contact_id", "folder_url"]
     missing_fields = [field for field in required_fields if field not in payload]
@@ -70,6 +72,14 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
             folder_id,
             email=email,
         )
+
+        if share_file_config:
+            expiration_time = None
+            if share_file_config.days > 0:
+                expiration_time = (
+                    datetime.now(timezone.utc) + timedelta(days=share_file_config.days)
+                ).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+            create_anyone_permission(service, folder_id, share_file_config.role, expiration_time)
     except LocalizedError as exc:
         handler.send_json(200, {"answer": handler.translate(exc.key, **exc.context)})
         return

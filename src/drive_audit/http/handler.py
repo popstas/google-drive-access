@@ -10,7 +10,7 @@ from ..model import DriveConfig, HttpConfig
 from ..planfix_client import PlanfixClient
 from . import create_client_folder as create_client_folder_route
 from . import set_client_folder_access as set_client_folder_access_route
-from . import set_client_subfolder_writer as set_client_subfolder_writer_route
+from . import share_folder as share_folder_route
 from . import share_file as share_file_route
 
 
@@ -70,6 +70,7 @@ def create_handler(
                     service=service,
                     drive_config=drive_config,
                     role=role,
+                    share_file_config=share_file_config,
                 )
                 return
 
@@ -97,7 +98,7 @@ def create_handler(
                 )
                 return
 
-            if self.path == "/set_client_subfolder_writer":
+            if self.path == "/share_folder":
                 if not self.authenticate():
                     return
 
@@ -111,7 +112,7 @@ def create_handler(
 
                 self._apply_lang(payload)
                 self._log_request(payload)
-                set_client_subfolder_writer_route.handle(
+                share_folder_route.handle(
                     self,
                     payload,
                     planfix_client=planfix_client,

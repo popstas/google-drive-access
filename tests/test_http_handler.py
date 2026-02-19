@@ -6,7 +6,7 @@ from drive_audit.access_service import extract_file_id
 from drive_audit.http import create_client_folder as create_client_folder_route
 from drive_audit.http import create_handler
 from drive_audit.http import set_client_folder_access as set_client_folder_access_route
-from drive_audit.http import set_client_subfolder_writer as set_client_subfolder_writer_route
+from drive_audit.http import share_folder as share_folder_route
 from drive_audit.http import share_file as share_file_route
 from drive_audit.http_utils import LocalizedError
 from drive_audit.model import DriveConfig, HttpConfig, ShareFileConfig
@@ -623,10 +623,151 @@ def test_lang_override_in_payload(monkeypatch, drive_config, http_config):
     assert "Выданы права" in payload_resp["answer"]
 
 
-# --- set_client_subfolder_writer tests ---
+def test_set_client_folder_access_public_permission(monkeypatch, drive_config, http_config):
+    """When share_file_config is provided, create_anyone_permission is called after grant_access."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "FOLDER123",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        lambda *args, **kwargs: {"granted_accounts": ["u@example.com"], "existing_accounts": []},
+    )
+
+    anyone_calls = []
+
+    def fake_create_anyone(svc, file_id, role, expiration_time):
+        anyone_calls.append((svc, file_id, role, expiration_time))
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.create_anyone_permission",
+        fake_create_anyone,
+    )
+
+    share_cfg = ShareFileConfig(role="reader", days=7)
+    set_client_folder_access_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/FOLDER123"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+        share_file_config=share_cfg,
+    )
+
+    assert len(anyone_calls) == 1
+    _, file_id, role, expiration_time = anyone_calls[0]
+    assert file_id == "FOLDER123"
+    assert role == "reader"
+    assert expiration_time is not None  # days=7 so expiration should be set
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "granted_existing" in payload["answer"]
 
 
-def _make_subfolder_writer_handler(drive_config, http_config, writer_subdir=None):
+def test_set_client_folder_access_public_permission_no_expiry(monkeypatch, drive_config, http_config):
+    """When share_file_config.days == 0, expiration_time is None."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "FOLDER456",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        lambda *args, **kwargs: {"granted_accounts": [], "existing_accounts": []},
+    )
+
+    anyone_calls = []
+
+    def fake_create_anyone(svc, file_id, role, expiration_time):
+        anyone_calls.append((svc, file_id, role, expiration_time))
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.create_anyone_permission",
+        fake_create_anyone,
+    )
+
+    share_cfg = ShareFileConfig(role="reader", days=0)
+    set_client_folder_access_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/FOLDER456"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+        share_file_config=share_cfg,
+    )
+
+    assert len(anyone_calls) == 1
+    _, file_id, role, expiration_time = anyone_calls[0]
+    assert file_id == "FOLDER456"
+    assert expiration_time is None
+
+
+def test_set_client_folder_access_no_public_permission_without_config(
+    monkeypatch, drive_config, http_config
+):
+    """When share_file_config is None, create_anyone_permission is not called."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "FOLDER789",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        lambda *args, **kwargs: {"granted_accounts": [], "existing_accounts": []},
+    )
+
+    anyone_calls = []
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.create_anyone_permission",
+        lambda *args: anyone_calls.append(args),
+    )
+
+    set_client_folder_access_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/FOLDER789"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+        share_file_config=None,
+    )
+
+    assert len(anyone_calls) == 0
+
+
+# --- share_folder tests ---
+
+
+def _make_share_folder_handler(drive_config, http_config, writer_subdir=None):
     import dataclasses
 
     cfg = dataclasses.replace(drive_config, writer_subdir=writer_subdir)
@@ -637,12 +778,12 @@ def _make_subfolder_writer_handler(drive_config, http_config, writer_subdir=None
     return handler, planfix_client, service, cfg
 
 
-def test_subfolder_writer_missing_fields(drive_config, http_config):
-    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+def test_share_folder_missing_fields(drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir="docs"
     )
 
-    set_client_subfolder_writer_route.handle(
+    share_folder_route.handle(
         handler,
         {"contact_id": 1},
         planfix_client=planfix_client,
@@ -656,12 +797,12 @@ def test_subfolder_writer_missing_fields(drive_config, http_config):
     assert "missing_fields" in payload["answer"]
 
 
-def test_subfolder_writer_not_configured(drive_config, http_config):
-    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+def test_share_folder_not_configured(drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir=None
     )
 
-    set_client_subfolder_writer_route.handle(
+    share_folder_route.handle(
         handler,
         {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
         planfix_client=planfix_client,
@@ -675,25 +816,25 @@ def test_subfolder_writer_not_configured(drive_config, http_config):
     assert "writer_subdir_not_configured" in payload["answer"]
 
 
-def test_subfolder_writer_subfolder_not_found(monkeypatch, drive_config, http_config):
-    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+def test_share_folder_subfolder_not_found(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir="docs"
     )
 
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        "drive_audit.http.share_folder.extract_folder_id",
         lambda url: "PARENT",
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        "drive_audit.http.share_folder.get_task_and_assignees",
         lambda client, cid: (0, []),
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        "drive_audit.http.share_folder.find_child_folder",
         lambda svc, parent, name, drive: None,
     )
 
-    set_client_subfolder_writer_route.handle(
+    share_folder_route.handle(
         handler,
         {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
         planfix_client=planfix_client,
@@ -707,25 +848,25 @@ def test_subfolder_writer_subfolder_not_found(monkeypatch, drive_config, http_co
     assert "subfolder_not_found" in payload["answer"]
 
 
-def test_subfolder_writer_not_a_folder(monkeypatch, drive_config, http_config):
-    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+def test_share_folder_not_a_folder(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir="docs"
     )
 
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        "drive_audit.http.share_folder.extract_folder_id",
         lambda url: "PARENT",
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        "drive_audit.http.share_folder.get_task_and_assignees",
         lambda client, cid: (0, []),
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        "drive_audit.http.share_folder.find_child_folder",
         lambda svc, parent, name, drive: {"id": "SUB123", "name": "docs"},
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.get_item_info",
+        "drive_audit.http.share_folder.get_item_info",
         lambda svc, item_id: {
             "id": item_id,
             "name": "docs",
@@ -734,7 +875,7 @@ def test_subfolder_writer_not_a_folder(monkeypatch, drive_config, http_config):
         },
     )
 
-    set_client_subfolder_writer_route.handle(
+    share_folder_route.handle(
         handler,
         {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
         planfix_client=planfix_client,
@@ -748,25 +889,25 @@ def test_subfolder_writer_not_a_folder(monkeypatch, drive_config, http_config):
     assert "subfolder_not_a_folder" in payload["answer"]
 
 
-def test_subfolder_writer_not_child(monkeypatch, drive_config, http_config):
-    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+def test_share_folder_not_child(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir="docs"
     )
 
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        "drive_audit.http.share_folder.extract_folder_id",
         lambda url: "PARENT",
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        "drive_audit.http.share_folder.get_task_and_assignees",
         lambda client, cid: (0, []),
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        "drive_audit.http.share_folder.find_child_folder",
         lambda svc, parent, name, drive: {"id": "SUB123", "name": "docs"},
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.get_item_info",
+        "drive_audit.http.share_folder.get_item_info",
         lambda svc, item_id: {
             "id": item_id,
             "name": "docs",
@@ -775,7 +916,7 @@ def test_subfolder_writer_not_child(monkeypatch, drive_config, http_config):
         },
     )
 
-    set_client_subfolder_writer_route.handle(
+    share_folder_route.handle(
         handler,
         {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
         planfix_client=planfix_client,
@@ -789,25 +930,25 @@ def test_subfolder_writer_not_child(monkeypatch, drive_config, http_config):
     assert "subfolder_not_child" in payload["answer"]
 
 
-def test_subfolder_writer_success(monkeypatch, drive_config, http_config):
-    handler, planfix_client, service, cfg = _make_subfolder_writer_handler(
+def test_share_folder_success(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir="docs"
     )
 
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.extract_folder_id",
+        "drive_audit.http.share_folder.extract_folder_id",
         lambda url: "PARENT",
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.get_task_and_assignees",
+        "drive_audit.http.share_folder.get_task_and_assignees",
         lambda client, cid: (42, [1, 2]),
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.find_child_folder",
+        "drive_audit.http.share_folder.find_child_folder",
         lambda svc, parent, name, drive: {"id": "SUB123", "name": "docs"},
     )
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.get_item_info",
+        "drive_audit.http.share_folder.get_item_info",
         lambda svc, item_id: {
             "id": item_id,
             "name": "docs",
@@ -823,11 +964,11 @@ def test_subfolder_writer_success(monkeypatch, drive_config, http_config):
         return {"granted_accounts": ["user@example.com"], "existing_accounts": []}
 
     monkeypatch.setattr(
-        "drive_audit.http.set_client_subfolder_writer.grant_access",
+        "drive_audit.http.share_folder.grant_access",
         fake_grant_access,
     )
 
-    set_client_subfolder_writer_route.handle(
+    share_folder_route.handle(
         handler,
         {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
         planfix_client=planfix_client,

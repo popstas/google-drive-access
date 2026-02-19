@@ -19,7 +19,7 @@ _FOLDER_MIME = "application/vnd.google-apps.folder"
 
 
 def handle(handler, payload, *, planfix_client, service, drive_config, role):
-    """Handle the /set_client_subfolder_writer route."""
+    """Handle the /share_folder route."""
     required_fields = ["contact_id", "folder_url"]
     missing_fields = [field for field in required_fields if field not in payload]
     if missing_fields:
