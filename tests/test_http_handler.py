@@ -574,6 +574,53 @@ def test_set_client_folder_access_email_as_list(
     assert payload["folder_url"] == "https://drive.google.com/drive/folders/folder-list"
 
 
+def test_set_client_folder_access_email_trailing_comma(
+    monkeypatch, drive_config, http_config
+):
+    """Email with trailing comma should be stripped before calling grant_access."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "folder-comma",
+    )
+
+    grant_access_calls = []
+
+    def fake_grant_access(*args, **kwargs):
+        grant_access_calls.append((args, kwargs))
+        return {"granted_accounts": ["user@example.com"], "existing_accounts": []}
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        fake_grant_access,
+    )
+
+    set_client_folder_access_route.handle(
+        handler,
+        {
+            "contact_id": 30,
+            "folder_url": "https://drive.google.com/drive/folders/folder-comma",
+            "email": "user@example.com,",
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+    )
+
+    assert len(grant_access_calls) == 1
+    _, kwargs = grant_access_calls[0]
+    assert kwargs["email"] == "user@example.com"
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "granted_existing" in payload["answer"]
+
+
 # --- lang override tests ---
 
 

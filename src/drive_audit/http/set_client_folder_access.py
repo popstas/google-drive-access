@@ -38,6 +38,9 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role, sha
         email = payload.get("email")
         if isinstance(email, list):
             email = email[0] if email else None
+        if isinstance(email, str):
+            parts = [e.strip() for e in email.split(",") if e.strip()]
+            email = parts[0] if parts else None
 
         if email:
             task_id = 0
