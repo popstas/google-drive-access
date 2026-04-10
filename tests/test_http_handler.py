@@ -1037,3 +1037,112 @@ def test_share_folder_success(monkeypatch, drive_config, http_config):
     # The drive_config passed to grant_access must have public_subdir=None
     passed_cfg = grant_calls[0][0][2]
     assert passed_cfg.public_subdir is None
+
+
+def _share_folder_monkeypatches(monkeypatch):
+    """Common monkeypatches for share_folder success-path tests."""
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.extract_folder_id",
+        lambda url: "PARENT",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.get_task_and_assignees",
+        lambda client, cid: (42, [1, 2]),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.find_child_folder",
+        lambda svc, parent, name, drive: {"id": "SUB123", "name": "docs"},
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.get_item_info",
+        lambda svc, item_id: {
+            "id": item_id,
+            "name": "docs",
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["PARENT"],
+        },
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.grant_access",
+        lambda *args, **kwargs: {"granted_accounts": ["user@example.com"], "existing_accounts": []},
+    )
+
+
+def test_share_folder_public_access_with_role(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+    _share_folder_monkeypatches(monkeypatch)
+
+    anyone_calls = []
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.create_anyone_permission",
+        lambda svc, fid, role, exp: anyone_calls.append((fid, role, exp)),
+    )
+
+    share_folder_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT", "public_access": "writer"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert len(anyone_calls) == 1
+    assert anyone_calls[0][0] == "SUB123"
+    assert anyone_calls[0][1] == "writer"
+    assert anyone_calls[0][2] is None
+
+
+def test_share_folder_public_access_bool_defaults_to_reader(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+    _share_folder_monkeypatches(monkeypatch)
+
+    anyone_calls = []
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.create_anyone_permission",
+        lambda svc, fid, role, exp: anyone_calls.append((fid, role, exp)),
+    )
+
+    share_folder_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT", "public_access": True},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    assert len(anyone_calls) == 1
+    assert anyone_calls[0][1] == "reader"
+
+
+def test_share_folder_no_public_access_by_default(monkeypatch, drive_config, http_config):
+    handler, planfix_client, service, cfg = _make_share_folder_handler(
+        drive_config, http_config, writer_subdir="docs"
+    )
+    _share_folder_monkeypatches(monkeypatch)
+
+    anyone_calls = []
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.create_anyone_permission",
+        lambda svc, fid, role, exp: anyone_calls.append((fid, role, exp)),
+    )
+
+    share_folder_route.handle(
+        handler,
+        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=cfg,
+        role="writer",
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert len(anyone_calls) == 0

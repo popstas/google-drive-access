@@ -12,7 +12,7 @@ from ..access_service import (
     normalize_assignee_ids,
     parse_assignee_ids,
 )
-from ..google_client import find_child_folder, get_item_info
+from ..google_client import create_anyone_permission, find_child_folder, get_item_info
 from ..http_utils import LocalizedError
 
 _FOLDER_MIME = "application/vnd.google-apps.folder"
@@ -92,6 +92,11 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
             subfolder_id,
             email=email,
         )
+
+        public_access = payload.get("public_access")
+        if public_access:
+            public_role = public_access if isinstance(public_access, str) else "reader"
+            create_anyone_permission(service, subfolder_id, public_role, None)
     except LocalizedError as exc:
         handler.send_json(200, {"answer": handler.translate(exc.key, **exc.context)})
         return
