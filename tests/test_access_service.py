@@ -72,6 +72,79 @@ def test_grant_access_filters_existing_accounts(monkeypatch):
     assert report["existing_accounts"] == ["200@example.com"]
 
 
+def test_grant_access_with_email_list(monkeypatch):
+    """grant_access should accept a list of emails and skip Planfix lookup."""
+    added_accounts = []
+
+    def fake_add_user_permission(service, folder_id, account, role):
+        added_accounts.append(account)
+        return {"id": f"perm-{account}"}
+
+    monkeypatch.setattr(access_service, "add_user_permission", fake_add_user_permission)
+    monkeypatch.setattr(
+        access_service,
+        "get_file_permissions",
+        lambda *_, **__: [{"type": "user", "emailAddress": "already@example.com"}],
+    )
+    monkeypatch.setattr(access_service, "ensure_public_subdir", lambda *_, **__: None)
+
+    def fail_get_child_tasks(*_args, **_kwargs):
+        raise AssertionError("Planfix path should be skipped when email is given")
+
+    planfix_client = type("PF", (), {"get_child_tasks": fail_get_child_tasks})()
+    drive_config = _drive_config()
+
+    report = access_service.grant_access(
+        planfix_client,
+        drive_service=None,
+        drive_config=drive_config,
+        role="reader",
+        task_id=0,
+        initial_assignee_ids=[],
+        folder_id="folder123",
+        email=["new@example.com", "already@example.com", "new@example.com"],
+    )
+
+    assert added_accounts == ["new@example.com"]
+    assert report["granted_accounts"] == ["new@example.com"]
+    assert report["existing_accounts"] == ["already@example.com"]
+
+
+def test_grant_access_with_comma_separated_email_string(monkeypatch):
+    """grant_access should split a comma-separated email string into a list."""
+    added_accounts = []
+
+    def fake_add_user_permission(service, folder_id, account, role):
+        added_accounts.append(account)
+        return {"id": f"perm-{account}"}
+
+    monkeypatch.setattr(access_service, "add_user_permission", fake_add_user_permission)
+    monkeypatch.setattr(
+        access_service,
+        "get_file_permissions",
+        lambda *_, **__: [],
+    )
+    monkeypatch.setattr(access_service, "ensure_public_subdir", lambda *_, **__: None)
+
+    planfix_client = type("PF", (), {})()
+    drive_config = _drive_config()
+
+    report = access_service.grant_access(
+        planfix_client,
+        drive_service=None,
+        drive_config=drive_config,
+        role="reader",
+        task_id=0,
+        initial_assignee_ids=[],
+        folder_id="folder123",
+        email="a@example.com, b@example.com, , a@example.com",
+    )
+
+    assert added_accounts == ["a@example.com", "b@example.com"]
+    assert report["granted_accounts"] == ["a@example.com", "b@example.com"]
+    assert report["existing_accounts"] == []
+
+
 def test_create_client_folder_handles_existing(monkeypatch):
     drive_config = _drive_config()
     monkeypatch.setattr(

@@ -10,6 +10,7 @@ from ..access_service import (
     get_task_and_assignees,
     grant_access,
     normalize_assignee_ids,
+    normalize_emails,
     parse_assignee_ids,
 )
 from ..google_client import create_anyone_permission, find_child_folder, get_item_info
@@ -40,11 +41,9 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
         contact_id = int(payload["contact_id"])
         parent_folder_id = extract_folder_id(str(payload["folder_url"]))
 
-        email = payload.get("email")
-        if isinstance(email, list):
-            email = email[0] if email else None
+        emails = normalize_emails(payload.get("email"))
 
-        if email:
+        if emails:
             task_id = 0
             initial_assignee_ids = []
         else:
@@ -76,7 +75,9 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
         # Verify the item is a folder and is a direct child of the client folder
         item_info = get_item_info(service, subfolder["id"])
         if item_info.get("mimeType") != _FOLDER_MIME:
-            raise LocalizedError("subfolder_not_a_folder", name=drive_config.writer_subdir)
+            raise LocalizedError(
+                "subfolder_not_a_folder", name=drive_config.writer_subdir
+            )
         if parent_folder_id not in item_info.get("parents", []):
             raise LocalizedError("subfolder_not_child")
 
@@ -90,7 +91,7 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role):
             task_id,
             initial_assignee_ids,
             subfolder_id,
-            email=email,
+            email=emails,
         )
 
         public_access = payload.get("public_access")

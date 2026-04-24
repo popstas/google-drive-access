@@ -10,8 +10,8 @@ from ..model import DriveConfig, HttpConfig
 from ..planfix_client import PlanfixClient
 from . import create_client_folder as create_client_folder_route
 from . import set_client_folder_access as set_client_folder_access_route
-from . import share_folder as share_folder_route
 from . import share_file as share_file_route
+from . import share_folder as share_folder_route
 
 
 def create_handler(

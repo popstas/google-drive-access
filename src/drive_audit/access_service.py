@@ -146,6 +146,29 @@ def collect_existing_user_accounts(service, folder_id: str) -> List[str]:
     ]
 
 
+def normalize_emails(email: Union[str, List[Any], None]) -> List[str]:
+    if email is None:
+        return []
+    if isinstance(email, str):
+        raw_items = email.split(",")
+    elif isinstance(email, list):
+        raw_items = []
+        for item in email:
+            raw_items.extend(str(item).split(","))
+    else:
+        raw_items = [str(email)]
+
+    seen: set = set()
+    result: List[str] = []
+    for item in raw_items:
+        cleaned = item.strip()
+        if not cleaned or cleaned in seen:
+            continue
+        seen.add(cleaned)
+        result.append(cleaned)
+    return result
+
+
 def grant_access(
     planfix_client: PlanfixClient,
     drive_service,
@@ -154,7 +177,7 @@ def grant_access(
     task_id: int,
     initial_assignee_ids: List[str],
     folder_id: str,
-    email: str = None,
+    email: Union[str, List[Any], None] = None,
 ) -> Dict[str, List[str]]:
     if drive_config.public_subdir:
         ensure_public_subdir(
@@ -164,8 +187,9 @@ def grant_access(
             drive_config.drive_id,
         )
 
-    if email:
-        google_accounts = [email]
+    email_accounts = normalize_emails(email)
+    if email_accounts:
+        google_accounts = email_accounts
     else:
         tasks = planfix_client.get_child_tasks(task_id)
         assignee_ids = PlanfixClient.collect_assignee_ids(tasks, initial_assignee_ids)

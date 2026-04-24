@@ -49,9 +49,7 @@ def handle(handler, payload, *, service, drive_config, share_file_config):
             return
 
         permissions = get_file_permissions(service, file_id)
-        anyone_perm = next(
-            (p for p in permissions if p.get("type") == "anyone"), None
-        )
+        anyone_perm = next((p for p in permissions if p.get("type") == "anyone"), None)
         if anyone_perm:
             handler.send_json(
                 200,
@@ -75,13 +73,9 @@ def handle(handler, payload, *, service, drive_config, share_file_config):
         create_anyone_permission(service, file_id, role, expiration_time)
 
         if days > 0:
-            answer = handler.translate(
-                "share_file_shared", days=days, role=role
-            )
+            answer = handler.translate("share_file_shared", days=days, role=role)
         else:
-            answer = handler.translate(
-                "share_file_shared_no_expire", role=role
-            )
+            answer = handler.translate("share_file_shared_no_expire", role=role)
 
     except LocalizedError as exc:
         handler.send_json(200, {"answer": handler.translate(exc.key, **exc.context)})

@@ -10,13 +10,23 @@ from ..access_service import (
     get_task_and_assignees,
     grant_access,
     normalize_assignee_ids,
+    normalize_emails,
     parse_assignee_ids,
 )
 from ..google_client import create_anyone_permission
 from ..http_utils import LocalizedError
 
 
-def handle(handler, payload, *, planfix_client, service, drive_config, role, share_file_config=None):
+def handle(
+    handler,
+    payload,
+    *,
+    planfix_client,
+    service,
+    drive_config,
+    role,
+    share_file_config=None,
+):
     """Handle the /set_client_folder_access route."""
     required_fields = ["contact_id", "folder_url"]
     missing_fields = [field for field in required_fields if field not in payload]
@@ -35,14 +45,9 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role, sha
         contact_id = int(payload["contact_id"])
         folder_id = extract_folder_id(str(payload["folder_url"]))
 
-        email = payload.get("email")
-        if isinstance(email, list):
-            email = email[0] if email else None
-        if isinstance(email, str):
-            parts = [e.strip() for e in email.split(",") if e.strip()]
-            email = parts[0] if parts else None
+        emails = normalize_emails(payload.get("email"))
 
-        if email:
+        if emails:
             task_id = 0
             initial_assignee_ids = []
         else:
@@ -73,7 +78,7 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role, sha
             task_id,
             initial_assignee_ids,
             folder_id,
-            email=email,
+            email=emails,
         )
 
         if share_file_config:
@@ -82,7 +87,9 @@ def handle(handler, payload, *, planfix_client, service, drive_config, role, sha
                 expiration_time = (
                     datetime.now(timezone.utc) + timedelta(days=share_file_config.days)
                 ).strftime("%Y-%m-%dT%H:%M:%S.000Z")
-            create_anyone_permission(service, folder_id, share_file_config.role, expiration_time)
+            create_anyone_permission(
+                service, folder_id, share_file_config.role, expiration_time
+            )
     except LocalizedError as exc:
         handler.send_json(200, {"answer": handler.translate(exc.key, **exc.context)})
         return

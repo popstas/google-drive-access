@@ -6,8 +6,8 @@ from drive_audit.access_service import extract_file_id
 from drive_audit.http import create_client_folder as create_client_folder_route
 from drive_audit.http import create_handler
 from drive_audit.http import set_client_folder_access as set_client_folder_access_route
-from drive_audit.http import share_folder as share_folder_route
 from drive_audit.http import share_file as share_file_route
+from drive_audit.http import share_folder as share_folder_route
 from drive_audit.http_utils import LocalizedError
 from drive_audit.model import DriveConfig, HttpConfig, ShareFileConfig
 
@@ -229,7 +229,9 @@ def test_share_file_missing_document_url(drive_config, http_config, share_file_c
     assert "missing_fields" in payload["answer"]
 
 
-def test_share_file_not_found(monkeypatch, drive_config, http_config, share_file_config):
+def test_share_file_not_found(
+    monkeypatch, drive_config, http_config, share_file_config
+):
     handler, service = _make_stub_handler(http_config, drive_config)
 
     monkeypatch.setattr(
@@ -326,9 +328,7 @@ def test_share_file_success_with_days(
     assert "commenter" in payload["answer"]
 
 
-def test_share_file_success_no_expiration(
-    monkeypatch, drive_config, http_config
-):
+def test_share_file_success_no_expiration(monkeypatch, drive_config, http_config):
     handler, service = _make_stub_handler(http_config, drive_config)
     config_no_expire = ShareFileConfig(days=0, role="reader")
 
@@ -456,7 +456,7 @@ def test_set_client_folder_access_email_skips_planfix(
 
     assert len(grant_access_calls) == 1
     _, kwargs = grant_access_calls[0]
-    assert kwargs["email"] == "user@example.com"
+    assert kwargs["email"] == ["user@example.com"]
 
     status, payload = handler.responses[0]
     assert status == 200
@@ -515,7 +515,7 @@ def test_set_client_folder_access_email_takes_precedence(
 
     assert len(grant_access_calls) == 1
     args, kwargs = grant_access_calls[0]
-    assert kwargs["email"] == "boss@example.com"
+    assert kwargs["email"] == ["boss@example.com"]
     # task_id and initial_assignee_ids should be dummy values
     assert args[4] == 0  # task_id
     assert args[5] == []  # initial_assignee_ids
@@ -525,9 +525,7 @@ def test_set_client_folder_access_email_takes_precedence(
     assert "granted_existing" in payload["answer"]
 
 
-def test_set_client_folder_access_email_as_list(
-    monkeypatch, drive_config, http_config
-):
+def test_set_client_folder_access_email_as_list(monkeypatch, drive_config, http_config):
     """When email arrives as a list (e.g. ["user@example.com"]), it should be
     unwrapped to a plain string before being forwarded to grant_access."""
     planfix_client = SimpleNamespace()
@@ -566,7 +564,7 @@ def test_set_client_folder_access_email_as_list(
 
     assert len(grant_access_calls) == 1
     _, kwargs = grant_access_calls[0]
-    assert kwargs["email"] == "user@example.com"
+    assert kwargs["email"] == ["user@example.com"]
 
     status, payload = handler.responses[0]
     assert status == 200
@@ -614,11 +612,195 @@ def test_set_client_folder_access_email_trailing_comma(
 
     assert len(grant_access_calls) == 1
     _, kwargs = grant_access_calls[0]
-    assert kwargs["email"] == "user@example.com"
+    assert kwargs["email"] == ["user@example.com"]
 
     status, payload = handler.responses[0]
     assert status == 200
     assert "granted_existing" in payload["answer"]
+
+
+def test_set_client_folder_access_multiple_emails(
+    monkeypatch, drive_config, http_config
+):
+    """Comma-separated email string should be split into a list forwarded to grant_access."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "folder-multi",
+    )
+
+    grant_access_calls = []
+
+    def fake_grant_access(*args, **kwargs):
+        grant_access_calls.append((args, kwargs))
+        return {
+            "granted_accounts": ["a@example.com", "b@example.com", "c@example.com"],
+            "existing_accounts": [],
+        }
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        fake_grant_access,
+    )
+
+    def fail_get_task(*args, **kwargs):
+        raise AssertionError("get_task_and_assignees should not be called")
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.get_task_and_assignees",
+        fail_get_task,
+    )
+
+    set_client_folder_access_route.handle(
+        handler,
+        {
+            "contact_id": 40,
+            "folder_url": "https://drive.google.com/drive/folders/folder-multi",
+            "email": "a@example.com, b@example.com, c@example.com",
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+    )
+
+    assert len(grant_access_calls) == 1
+    _, kwargs = grant_access_calls[0]
+    assert kwargs["email"] == [
+        "a@example.com",
+        "b@example.com",
+        "c@example.com",
+    ]
+
+
+def test_set_client_folder_access_email_list_multiple(
+    monkeypatch, drive_config, http_config
+):
+    """A list with multiple emails should be forwarded as-is (deduplicated)."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "folder-list-multi",
+    )
+
+    grant_access_calls = []
+
+    def fake_grant_access(*args, **kwargs):
+        grant_access_calls.append((args, kwargs))
+        return {
+            "granted_accounts": ["a@example.com", "b@example.com"],
+            "existing_accounts": [],
+        }
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        fake_grant_access,
+    )
+
+    set_client_folder_access_route.handle(
+        handler,
+        {
+            "contact_id": 41,
+            "folder_url": "https://drive.google.com/drive/folders/folder-list-multi",
+            "email": ["a@example.com", "b@example.com"],
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+    )
+
+    assert len(grant_access_calls) == 1
+    _, kwargs = grant_access_calls[0]
+    assert kwargs["email"] == ["a@example.com", "b@example.com"]
+
+
+def test_share_folder_multiple_emails(monkeypatch, drive_config, http_config):
+    """share_folder should split comma-separated emails and forward the list."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+    drive_config_writer = DriveConfig(
+        credentials_file=drive_config.credentials_file,
+        delegated_user=drive_config.delegated_user,
+        drive_id=drive_config.drive_id,
+        root_folder_id=drive_config.root_folder_id,
+        root_folder_name=drive_config.root_folder_name,
+        include_trashed=drive_config.include_trashed,
+        include_shortcuts=drive_config.include_shortcuts,
+        max_depth=drive_config.max_depth,
+        limit=drive_config.limit,
+        public_subdir=drive_config.public_subdir,
+        writer_subdir="Shared",
+        output_dir=drive_config.output_dir,
+        yaml_file=drive_config.yaml_file,
+        files_csv=drive_config.files_csv,
+        permissions_csv=drive_config.permissions_csv,
+    )
+
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.extract_folder_id",
+        lambda url: "parent-id",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.find_child_folder",
+        lambda *args, **kwargs: {"id": "sub-id"},
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.get_item_info",
+        lambda *args, **kwargs: {
+            "mimeType": "application/vnd.google-apps.folder",
+            "parents": ["parent-id"],
+        },
+    )
+
+    grant_access_calls = []
+
+    def fake_grant_access(*args, **kwargs):
+        grant_access_calls.append((args, kwargs))
+        return {
+            "granted_accounts": ["a@example.com", "b@example.com"],
+            "existing_accounts": [],
+        }
+
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.grant_access",
+        fake_grant_access,
+    )
+
+    def fail_get_task(*args, **kwargs):
+        raise AssertionError("get_task_and_assignees should not be called")
+
+    monkeypatch.setattr(
+        "drive_audit.http.share_folder.get_task_and_assignees",
+        fail_get_task,
+    )
+
+    share_folder_route.handle(
+        handler,
+        {
+            "contact_id": 50,
+            "folder_url": "https://drive.google.com/drive/folders/parent-id",
+            "email": "a@example.com, b@example.com",
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config_writer,
+        role="writer",
+    )
+
+    assert len(grant_access_calls) == 1
+    _, kwargs = grant_access_calls[0]
+    assert kwargs["email"] == ["a@example.com", "b@example.com"]
 
 
 # --- lang override tests ---
@@ -670,7 +852,9 @@ def test_lang_override_in_payload(monkeypatch, drive_config, http_config):
     assert "Выданы права" in payload_resp["answer"]
 
 
-def test_set_client_folder_access_public_permission(monkeypatch, drive_config, http_config):
+def test_set_client_folder_access_public_permission(
+    monkeypatch, drive_config, http_config
+):
     """When share_file_config is provided, create_anyone_permission is called after grant_access."""
     planfix_client = SimpleNamespace()
     service = object()
@@ -687,7 +871,10 @@ def test_set_client_folder_access_public_permission(monkeypatch, drive_config, h
     )
     monkeypatch.setattr(
         "drive_audit.http.set_client_folder_access.grant_access",
-        lambda *args, **kwargs: {"granted_accounts": ["u@example.com"], "existing_accounts": []},
+        lambda *args, **kwargs: {
+            "granted_accounts": ["u@example.com"],
+            "existing_accounts": [],
+        },
     )
 
     anyone_calls = []
@@ -703,7 +890,10 @@ def test_set_client_folder_access_public_permission(monkeypatch, drive_config, h
     share_cfg = ShareFileConfig(role="reader", days=7)
     set_client_folder_access_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/FOLDER123"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/FOLDER123",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=drive_config,
@@ -722,7 +912,9 @@ def test_set_client_folder_access_public_permission(monkeypatch, drive_config, h
     assert "granted_existing" in payload["answer"]
 
 
-def test_set_client_folder_access_public_permission_no_expiry(monkeypatch, drive_config, http_config):
+def test_set_client_folder_access_public_permission_no_expiry(
+    monkeypatch, drive_config, http_config
+):
     """When share_file_config.days == 0, expiration_time is None."""
     planfix_client = SimpleNamespace()
     service = object()
@@ -755,7 +947,10 @@ def test_set_client_folder_access_public_permission_no_expiry(monkeypatch, drive
     share_cfg = ShareFileConfig(role="reader", days=0)
     set_client_folder_access_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/FOLDER456"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/FOLDER456",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=drive_config,
@@ -800,7 +995,10 @@ def test_set_client_folder_access_no_public_permission_without_config(
 
     set_client_folder_access_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/FOLDER789"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/FOLDER789",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=drive_config,
@@ -851,7 +1049,10 @@ def test_share_folder_not_configured(drive_config, http_config):
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
@@ -883,7 +1084,10 @@ def test_share_folder_subfolder_not_found(monkeypatch, drive_config, http_config
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
@@ -924,7 +1128,10 @@ def test_share_folder_not_a_folder(monkeypatch, drive_config, http_config):
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
@@ -965,7 +1172,10 @@ def test_share_folder_not_child(monkeypatch, drive_config, http_config):
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
@@ -1017,7 +1227,10 @@ def test_share_folder_success(monkeypatch, drive_config, http_config):
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
@@ -1064,7 +1277,10 @@ def _share_folder_monkeypatches(monkeypatch):
     )
     monkeypatch.setattr(
         "drive_audit.http.share_folder.grant_access",
-        lambda *args, **kwargs: {"granted_accounts": ["user@example.com"], "existing_accounts": []},
+        lambda *args, **kwargs: {
+            "granted_accounts": ["user@example.com"],
+            "existing_accounts": [],
+        },
     )
 
 
@@ -1082,7 +1298,11 @@ def test_share_folder_public_access_with_role(monkeypatch, drive_config, http_co
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT", "public_access": "writer"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+            "public_access": "writer",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
@@ -1097,7 +1317,9 @@ def test_share_folder_public_access_with_role(monkeypatch, drive_config, http_co
     assert anyone_calls[0][2] is None
 
 
-def test_share_folder_public_access_bool_defaults_to_reader(monkeypatch, drive_config, http_config):
+def test_share_folder_public_access_bool_defaults_to_reader(
+    monkeypatch, drive_config, http_config
+):
     handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir="docs"
     )
@@ -1111,7 +1333,11 @@ def test_share_folder_public_access_bool_defaults_to_reader(monkeypatch, drive_c
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT", "public_access": True},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+            "public_access": True,
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
@@ -1122,7 +1348,9 @@ def test_share_folder_public_access_bool_defaults_to_reader(monkeypatch, drive_c
     assert anyone_calls[0][1] == "reader"
 
 
-def test_share_folder_no_public_access_by_default(monkeypatch, drive_config, http_config):
+def test_share_folder_no_public_access_by_default(
+    monkeypatch, drive_config, http_config
+):
     handler, planfix_client, service, cfg = _make_share_folder_handler(
         drive_config, http_config, writer_subdir="docs"
     )
@@ -1136,7 +1364,10 @@ def test_share_folder_no_public_access_by_default(monkeypatch, drive_config, htt
 
     share_folder_route.handle(
         handler,
-        {"contact_id": 1, "folder_url": "https://drive.google.com/drive/folders/PARENT"},
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/PARENT",
+        },
         planfix_client=planfix_client,
         service=service,
         drive_config=cfg,
