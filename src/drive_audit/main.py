@@ -11,7 +11,7 @@ from .export_yaml import save_yaml
 from .google_client import get_file_permissions, get_service, list_files
 from .logger_config import configure_logger
 from .model import DriveConfig
-from .scanner import build_file_tree
+from .scanner import build_file_tree, compute_file_depth
 
 
 def load_config(config_path: str) -> dict:
@@ -87,26 +87,45 @@ def main():
 
         # 2. Fetch permissions for each file
         if config.collect_permissions:
-            logger.info("Fetching permissions for files...")
+            max_level = config.collect_permissions_max_level
+            if max_level is not None:
+                file_map = {f["id"]: f for f in raw_files if f.get("id")}
+                logger.info(
+                    f"Fetching permissions for files up to depth {max_level}..."
+                )
+            else:
+                file_map = None
+                logger.info("Fetching permissions for files...")
             files_with_perms = 0
             total_perms = 0
+            skipped_by_depth = 0
             for idx, file_data in enumerate(raw_files, 1):
                 file_id = file_data.get("id")
-                if file_id:
-                    permissions = get_file_permissions(service, file_id)
-                    file_data["permissions"] = permissions
-                    if permissions:
-                        files_with_perms += 1
-                        total_perms += len(permissions)
-                    if idx % 10 == 0:
-                        logger.debug(
-                            f"Fetched permissions for {idx}/{len(raw_files)} files..."
-                        )
+                if not file_id:
+                    continue
+                if max_level is not None:
+                    depth = compute_file_depth(file_data, file_map, config)
+                    if depth is None or depth > max_level:
+                        skipped_by_depth += 1
+                        continue
+                permissions = get_file_permissions(service, file_id)
+                file_data["permissions"] = permissions
+                if permissions:
+                    files_with_perms += 1
+                    total_perms += len(permissions)
+                if idx % 10 == 0:
+                    logger.debug(
+                        f"Fetched permissions for {idx}/{len(raw_files)} files..."
+                    )
             logger.info(
                 "Finished fetching permissions. {} files have permissions ({} total permissions).",
                 files_with_perms,
                 total_perms,
             )
+            if max_level is not None:
+                logger.info(
+                    f"Skipped {skipped_by_depth} files above depth {max_level}."
+                )
         else:
             logger.info("Skipping permissions collection as per configuration.")
 

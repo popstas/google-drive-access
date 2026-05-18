@@ -18,6 +18,7 @@ scan:
   include_trashed: false
   include_shortcuts: true
   collect_permissions: true
+  collect_permissions_max_level: null  # null = all depths; N = only depths <= N (1 = client folders only)
   max_depth: null
   public_subdir: "public"
 

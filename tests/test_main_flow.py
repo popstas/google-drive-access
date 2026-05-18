@@ -138,3 +138,59 @@ output:
     audit_main.main()
 
     assert captured_files["files"][0].get("permissions") is None
+
+
+def test_main_collects_permissions_only_up_to_max_level(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.yml"
+    output_dir = tmp_path / "output"
+    config_path.write_text("""
+logLevel: INFO
+drive:
+  id: drive-id
+  root_folder_id: root-folder
+  root_folder_name: Root
+google:
+  credentials_file: creds.json
+scan:
+  include_trashed: false
+  include_shortcuts: true
+  collect_permissions: true
+  collect_permissions_max_level: 1
+output:
+  dir: {output_dir}
+  yaml_file: data.yml
+  files_csv: files.csv
+  permissions_csv: perms.csv
+""".format(output_dir=output_dir))
+
+    raw_files = [
+        {"id": "clientA", "name": "ClientA", "parents": ["root-folder"]},
+        {"id": "sub", "name": "sub", "parents": ["clientA"]},
+        {"id": "deep_file", "name": "deep.txt", "parents": ["sub"]},
+        {"id": "orphan", "name": "orphan.txt", "parents": ["nope"]},
+    ]
+
+    monkeypatch.setattr(audit_main, "get_service", lambda cfg: SimpleNamespace())
+    monkeypatch.setattr(
+        audit_main,
+        "list_files",
+        lambda service, drive_id, limit=None: raw_files,
+    )
+
+    called_for = []
+
+    def _fake_permissions(service, file_id):
+        called_for.append(file_id)
+        return [f"perm-{file_id}"]
+
+    monkeypatch.setattr(audit_main, "get_file_permissions", _fake_permissions)
+    monkeypatch.setattr(audit_main, "build_file_tree", lambda files, cfg: [])
+    monkeypatch.setattr(audit_main, "save_yaml", lambda data, cfg, path: None)
+    monkeypatch.setattr(audit_main, "save_files_csv", lambda data, path: None)
+    monkeypatch.setattr(audit_main, "save_permissions_csv", lambda data, path: None)
+
+    monkeypatch.setattr(sys, "argv", ["prog", "--config", str(config_path)])
+
+    audit_main.main()
+
+    assert called_for == ["clientA"]

@@ -67,6 +67,7 @@ scan:
   include_trashed: false
   include_shortcuts: true
   collect_permissions: true
+  collect_permissions_max_level: null  # null = all depths; N = only depths <= N (1 = client folders only)
   public_subdir: "public"
 
 cache_timeouts:
@@ -115,6 +116,8 @@ http:
 ```
 
 Set `collect_permissions` to `false` if you only need the file list and want to skip fetching sharing permissions to reduce API calls. Permissions exports will be empty when collection is disabled.
+
+Set `collect_permissions_max_level` to an integer to fetch permissions only for files/folders up to that depth under `root_folder_id` (`1` covers only the first-level client folders, `2` adds one level deeper, etc.). Leave it as `null` to fetch permissions for every file. Ignored when `collect_permissions` is `false`.
 
 Set `public_subdir` to the name of a public-facing subfolder you want to enforce under the target folder when using the HTTP server. If the subfolder does not exist, the server will create it and share it publicly (anyone with the link, reader access).
 

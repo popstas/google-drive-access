@@ -33,6 +33,41 @@ def normalize_unicode(text: str) -> str:
     return normalize("NFC", text)
 
 
+def compute_file_depth(
+    file_data: Dict[str, Any],
+    file_map: Dict[str, Dict[str, Any]],
+    config: DriveConfig,
+) -> Optional[int]:
+    """Depth of a file under ``config.root_folder_id`` (1 = direct child).
+
+    Returns ``None`` when the file is not reachable from ``root_folder_id``
+    (only possible in sub-folder scans; drive-wide scans always succeed).
+    """
+    file_id = file_data.get("id")
+    curr = file_data
+    curr_id = file_id
+    depth = 0
+
+    drive_wide = config.root_folder_id == config.drive_id
+
+    while True:
+        depth += 1
+        parents = curr.get("parents", [])
+        if not parents:
+            return depth if drive_wide else None
+
+        next_parent_id = parents[0]
+
+        if not drive_wide and next_parent_id == config.root_folder_id:
+            return depth
+
+        if next_parent_id not in file_map:
+            return depth if drive_wide else None
+
+        curr = file_map[next_parent_id]
+        curr_id = next_parent_id
+
+
 def build_file_tree(
     files_data: List[Dict[str, Any]], config: DriveConfig
 ) -> List[FileInfo]:
