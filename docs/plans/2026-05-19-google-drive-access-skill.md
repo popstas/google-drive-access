@@ -93,10 +93,10 @@ Standalone scripts (5):
 - [x] manual review — spot-check 2 files for anonymization and accuracy against source use-cases
 
 ### Task 4: Reference files for standalone scripts
-- [ ] create `references/find-extra-author-access.md`, `references/find-authors-on-inactive-folders.md`, `references/find-similar-files.md`
-- [ ] create `references/check-compare-results.md`, `references/revert-merge-client-folders.md`
-- [ ] each file: Purpose, When to use, Hardcoded inputs (note that paths often live in `__main__`), Command line, Outputs
-- [ ] manual review — spot-check 1 file
+- [x] create `references/find-extra-author-access.md`, `references/find-authors-on-inactive-folders.md`, `references/find-similar-files.md`
+- [x] create `references/check-compare-results.md`, `references/revert-merge-client-folders.md`
+- [x] each file: Purpose, When to use, Hardcoded inputs (note that paths often live in `__main__`), Command line, Outputs
+- [x] manual review — spot-check 1 file
 
 ### Task 5: Verify acceptance criteria
 - [ ] verify SKILL.md frontmatter has `name` and `description` with trigger phrases
