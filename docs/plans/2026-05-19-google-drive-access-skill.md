@@ -99,11 +99,11 @@ Standalone scripts (5):
 - [x] manual review — spot-check 1 file
 
 ### Task 5: Verify acceptance criteria
-- [ ] verify SKILL.md frontmatter has `name` and `description` with trigger phrases
-- [ ] verify all 16 scenarios appear in the Quick Reference matrix
-- [ ] verify each matrix row links to an existing `references/*.md`
-- [ ] grep the skill tree for any real drive IDs / Planfix domains / non-example emails — should be empty
-- [ ] read SKILL.md end-to-end to confirm it stands alone for an agent picking up the project cold
+- [x] verify SKILL.md frontmatter has `name` and `description` with trigger phrases
+- [x] verify all 16 scenarios appear in the Quick Reference matrix
+- [x] verify each matrix row links to an existing `references/*.md`
+- [x] grep the skill tree for any real drive IDs / Planfix domains / non-example emails — should be empty
+- [x] read SKILL.md end-to-end to confirm it stands alone for an agent picking up the project cold
 
 ## Technical Details
 
