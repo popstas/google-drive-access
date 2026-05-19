@@ -81,10 +81,10 @@ Standalone scripts (5):
 - [x] manual review — confirm frontmatter parses and section outline is sound
 
 ### Task 2: Quick Reference matrix and Setup section
-- [ ] add markdown table mapping each scenario → command → reference file → inputs (16 rows total)
-- [ ] write "Setup" section: prerequisites (Python 3.11+, service account JSON in `data/service-account.json`, `data/config.yml`), with anonymized config snippet
-- [ ] add "Common Workflows" section: 3–4 multi-step recipes (e.g. "audit a drive then move public files", "compare two scans and recheck differences")
-- [ ] manual review — verify no real IDs/tokens/emails appear
+- [x] add markdown table mapping each scenario → command → reference file → inputs (16 rows total)
+- [x] write "Setup" section: prerequisites (Python 3.11+, service account JSON in `data/service-account.json`, `data/config.yml`), with anonymized config snippet
+- [x] add "Common Workflows" section: 3–4 multi-step recipes (e.g. "audit a drive then move public files", "compare two scans and recheck differences")
+- [x] manual review — verify no real IDs/tokens/emails appear
 
 ### Task 3: Reference files for CLI commands
 - [ ] create `references/audit-scan.md`, `references/move-files-to-public-folder.md`, `references/move-files-csv.md`, `references/compare-files.md`, `references/recheck-files.md`
