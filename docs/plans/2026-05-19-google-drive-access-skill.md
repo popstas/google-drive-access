@@ -76,9 +76,9 @@ Standalone scripts (5):
 ## Implementation Steps
 
 ### Task 1: Skeleton and SKILL.md frontmatter
-- [ ] create `skills/google-drive-access/SKILL.md` with YAML frontmatter (`name: google-drive-access`, English `description` with trigger phrases: "google drive audit", "shared drive scan", "drive permissions", "planfix folder", "compare drive files", "client folder")
-- [ ] add top-level sections: "When to Use", "Quick Reference" (command matrix), "Setup", "Common Workflows", "Reference Files"
-- [ ] manual review — confirm frontmatter parses and section outline is sound
+- [x] create `skills/google-drive-access/SKILL.md` with YAML frontmatter (`name: google-drive-access`, English `description` with trigger phrases: "google drive audit", "shared drive scan", "drive permissions", "planfix folder", "compare drive files", "client folder")
+- [x] add top-level sections: "When to Use", "Quick Reference" (command matrix), "Setup", "Common Workflows", "Reference Files"
+- [x] manual review — confirm frontmatter parses and section outline is sound
 
 ### Task 2: Quick Reference matrix and Setup section
 - [ ] add markdown table mapping each scenario → command → reference file → inputs (16 rows total)
