@@ -87,10 +87,10 @@ Standalone scripts (5):
 - [x] manual review — verify no real IDs/tokens/emails appear
 
 ### Task 3: Reference files for CLI commands
-- [ ] create `references/audit-scan.md`, `references/move-files-to-public-folder.md`, `references/move-files-csv.md`, `references/compare-files.md`, `references/recheck-files.md`
-- [ ] create `references/migrate-contact-folders.md`, `references/merge-client-folders.md`, `references/delete-empty-folders.md`, `references/drive-links-info.md`, `references/remove-access.md`, `references/filter-permissions.md`
-- [ ] each file: Purpose, When to use, Inputs (config keys + CLI flags), Command line example (anonymized), Outputs, Pitfalls/notes
-- [ ] manual review — spot-check 2 files for anonymization and accuracy against source use-cases
+- [x] create `references/audit-scan.md`, `references/move-files-to-public-folder.md`, `references/move-files-csv.md`, `references/compare-files.md`, `references/recheck-files.md`
+- [x] create `references/migrate-contact-folders.md`, `references/merge-client-folders.md`, `references/delete-empty-folders.md`, `references/drive-links-info.md`, `references/remove-access.md`, `references/filter-permissions.md`
+- [x] each file: Purpose, When to use, Inputs (config keys + CLI flags), Command line example (anonymized), Outputs, Pitfalls/notes
+- [x] manual review — spot-check 2 files for anonymization and accuracy against source use-cases
 
 ### Task 4: Reference files for standalone scripts
 - [ ] create `references/find-extra-author-access.md`, `references/find-authors-on-inactive-folders.md`, `references/find-similar-files.md`
