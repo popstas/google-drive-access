@@ -16,7 +16,7 @@ CLI flags:
 
 | Flag | Default | Description |
 |------|---------|-------------|
-| `--csv-file <path>` | `data/merge_client_folders.csv` | CSV log produced by the original merge. Required columns: `action`, `file_id`, `file_name`, `source_folder_id`, `source_parent_id`, `dest_folder_id`. Only rows with `action == "move"` are processed |
+| `--csv-file <path>` | `data/merge_client_folders.csv` | CSV log produced by the original merge. Required columns: `action`, `file_id`, `dest_folder_id`, and at least one of `source_parent_id` / `source_folder_id`. `file_name` is optional (used only for log messages). The merge CSV also contains `action == "delete"` rows; only `action == "move"` rows are processed by revert |
 | `--config <path>` | `data/config.yml` | Config with service account and `drive_id` |
 | `--dry-run` | off | Log intended moves only — no API mutations |
 | `--debug` | off | DEBUG-level logging |
@@ -62,4 +62,4 @@ Service account must have `files.update` on the Shared Drive (`supportsAllDrives
 - **Always run `--dry-run` first.** A merge CSV with swapped `source_folder_id` / `dest_folder_id` will scatter files into the wrong folders on revert.
 - The script does **not** restore folders the original merge deleted (e.g. emptied source folders). Recreate them by hand or by re-running `audit-scan` then a corrective move.
 - Permissions added to the merged destination folder after the merge are not touched.
-- Rows missing `file_id` or `dest_folder_id` are silently skipped at read time — they will not appear in the log.
+- Rows missing `file_id`, `dest_folder_id`, or both source folder IDs (`source_parent_id` *and* `source_folder_id` empty) are silently skipped at read time — they will not appear in the log.

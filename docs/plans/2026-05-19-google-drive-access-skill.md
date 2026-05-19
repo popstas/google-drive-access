@@ -116,7 +116,7 @@ description: <English summary + trigger phrases>
 ```
 
 Anonymization map applied throughout:
-- Drive IDs (`0AGx8...`, real values from config.yml) → `<DRIVE_ID>`
+- Drive IDs (real values from config.yml) → `<DRIVE_ID>`
 - Folder IDs → `<FOLDER_ID>`
 - Planfix URLs (`https://api.example.com/...` in README is already a placeholder; keep that style) → `https://planfix.example.com/...`
 - Tokens → `<TOKEN>`

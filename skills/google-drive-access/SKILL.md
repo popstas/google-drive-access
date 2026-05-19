@@ -22,26 +22,29 @@ HTTP endpoints are out of scope for this skill — see `README.md` and `data/use
 
 ## Quick Reference
 
-All 16 scenarios. CLI commands run as `python -m drive_audit.commands --config data/config.yml <command>` unless noted. Standalone scripts run as `python <script>.py` from the repo root.
+All 16 single-command scenarios plus 1 composite workflow. CLI commands run as `python -m drive_audit.commands --config data/config.yml <command>` unless noted. Standalone scripts run as `python <script>.py` from the repo root.
+
+Note: `--config` and `--debug` are top-level flags of `python -m drive_audit.commands` — they must appear **before** the subcommand name (e.g. `python -m drive_audit.commands --config data/config.yml --debug merge_client_folders ...`). Subcommand-specific flags (`--csv-file`, `--dry-run`, `--emails`, etc.) appear after the subcommand.
 
 | # | Scenario | Command / script | Reference | Typical inputs |
 |---|----------|------------------|-----------|----------------|
 | 1 | Full Shared Drive audit (file tree, permissions, policy) | `python -m src.drive_audit.main` | [audit-scan.md](references/audit-scan.md) | `data/config.yml`, service account JSON |
 | 2 | Move files into the public subfolder by regex | `move_files_to_public_folder` | [move-files-to-public-folder.md](references/move-files-to-public-folder.md) | `commands.move_files_to_public_folder.file_match` / `mimeType_match` in config |
 | 3 | Move files into target folders via CSV manifest | `move_files_csv` | [move-files-csv.md](references/move-files-csv.md) | `data/move_files.csv` |
-| 4 | Compare two scans (`files.csv` vs `new_files.csv`) | `compare_files` | [compare-files.md](references/compare-files.md) | two CSVs under `data/`, `compare.*` config |
-| 5 | Recheck a list of files against current Drive state | `recheck_files` | [recheck-files.md](references/recheck-files.md) | CSV with `file_id` or `location` column |
+| 4 | Compare two scans (`files.csv` vs `new_files.csv`) | `compare_files <csv_old> <csv_new>` | [compare-files.md](references/compare-files.md) | two CSV paths (positional args: `csv_old`, `csv_new`), `compare.*` config |
+| 5 | Recheck a list of files against current Drive state | `recheck_files` | [recheck-files.md](references/recheck-files.md) | CSV with a `file_id` column (or `--file-ids` directly) |
 | 6 | Migrate Planfix contact folders into the drive | `migrate_contact_folders` | [migrate-contact-folders.md](references/migrate-contact-folders.md) | contacts CSV, Planfix endpoints in config |
-| 7 | Merge duplicate client folders (level-1) | `merge_client_folders` | [merge-client-folders.md](references/merge-client-folders.md) | `data/files.csv` or `data/new_files.csv` |
+| 7 | Merge duplicate client folders (level-1) | `merge_client_folders` | [merge-client-folders.md](references/merge-client-folders.md) | `--csv-file` (default `data/new_disk/new_files.csv`) |
 | 8 | Delete empty folders | `delete_empty_folders` | [delete-empty-folders.md](references/delete-empty-folders.md) | `data/files.csv` |
 | 9 | Resolve drive links to metadata (id, name, path) | `drive_links_info` | [drive-links-info.md](references/drive-links-info.md) | CSV with folder/file URLs |
 | 10 | Remove access entries for users / domains | `remove_access` | [remove-access.md](references/remove-access.md) | `data/remove-access.csv` |
-| 11 | Filter a permissions CSV (by role, email pattern, etc.) | `filter_permissions` | [filter-permissions.md](references/filter-permissions.md) | `data/permissions.csv` |
-| 12 | Find authors with extra access beyond their articles | `python find_extra_author_access.py` | [find-extra-author-access.md](references/find-extra-author-access.md) | `science_emails.csv`, `active_science_articles.csv`, `permissions.csv` |
+| 11 | Filter a permissions CSV by exact email (case-insensitive, no wildcards) | `filter_permissions` | [filter-permissions.md](references/filter-permissions.md) | required `--emails user1@example.com,user2@example.com` and `--csv-save <out>`; `--csv-file` defaults to `data/permissions.csv` |
+| 12 | Find authors with extra access beyond their articles | `python find_extra_author_access.py` | [find-extra-author-access.md](references/find-extra-author-access.md) | `science_emails.csv`, `<YYYY-MM-DD>-active_science_articles.csv` (filename hardcoded in script), `permissions.csv` |
 | 13 | Find authors still on inactive folders | `python find_authors_on_inactive_folders.py` | [find-authors-on-inactive-folders.md](references/find-authors-on-inactive-folders.md) | same three CSVs as #12 |
 | 14 | Find similar file pairs between two scans | `python find_similar_files.py` | [find-similar-files.md](references/find-similar-files.md) | `compare_only_old.csv`, `compare_only_new.csv` |
 | 15 | Sanity-check a compare run (counts, diffs) | `python check_compare_results.py` | [check-compare-results.md](references/check-compare-results.md) | `compare_only_*.csv`, `.compare_results.json` |
 | 16 | Revert a `merge_client_folders` run | `python revert_merge_client_folders.py` | [revert-merge-client-folders.md](references/revert-merge-client-folders.md) | `data/merge_client_folders.csv` |
+| 17 | Revoke all direct access of a single user (offboarding) — composite | `filter_permissions` + `remove_access` | [remove-user-access.md](references/remove-user-access.md) | email(s) to revoke, fresh `data/permissions.csv` |
 
 ## Setup
 
@@ -78,6 +81,7 @@ scan:
   public_subdir: "public"
 
 compare:
+  ignore_public_subdir: false
   normalize_file_names: false
   ignore_format_differences: false
   ignore_duplicate_suffixes: false
@@ -108,6 +112,9 @@ planfix:
     token: "<TOKEN>"
   getClientTask:
     url: "https://planfix.example.com/client-task"
+    token: "<TOKEN>"
+  updateContact:
+    url: "https://planfix.example.com/update-contact"
     token: "<TOKEN>"
   role: "writer"
   timeout: 120
@@ -140,7 +147,7 @@ Recipe 2 — Compare two scans and recheck the differences
 
 1. Run `audit-scan` once to produce `data/files.csv` (the "old" snapshot).
 2. Later, run `audit-scan` again and rename the output to `data/new_files.csv`.
-3. Run `python -m drive_audit.commands --config data/config.yml compare_files`. Outputs `compare_only_old.csv`, `compare_only_new.csv`, and `.compare_results.json`. See [compare-files.md](references/compare-files.md).
+3. Run `python -m drive_audit.commands --config data/config.yml compare_files data/files.csv data/new_files.csv` (both CSV paths are required positional args). Outputs `compare_only_old.csv` and `compare_only_new.csv` (`.compare_results.json` is produced in the next step by `check_compare_results.py`). See [compare-files.md](references/compare-files.md).
 4. Run `python check_compare_results.py` to summarize the diff and catch normalization issues. See [check-compare-results.md](references/check-compare-results.md).
 5. Run `python find_similar_files.py` to surface near-duplicates between the two scans. See [find-similar-files.md](references/find-similar-files.md).
 6. If diffs are real, feed them to `recheck_files` to confirm current Drive state. See [recheck-files.md](references/recheck-files.md).
@@ -155,14 +162,21 @@ Recipe 3 — Clean up a drive: merge duplicate client folders, then delete empty
 
 Recipe 4 — Find and remove stale author access on inactive folders
 
-1. Prepare `science_emails.csv` (authors of interest), `active_science_articles.csv` (active folders), and a fresh `permissions.csv` from `audit-scan`.
-2. Run `python find_authors_on_inactive_folders.py` to produce a candidate removal list. See [find-authors-on-inactive-folders.md](references/find-authors-on-inactive-folders.md).
+1. Prepare `science_emails.csv` (authors of interest), `<YYYY-MM-DD>-active_science_articles.csv` (active folders — the date prefix is hardcoded in the scripts, edit `ACTIVE_ARTICLES` to match), and a fresh `permissions.csv` from `audit-scan`.
+2. Run `python find_authors_on_inactive_folders.py` — writes `data/remove-access-inactive-folders.csv`. See [find-authors-on-inactive-folders.md](references/find-authors-on-inactive-folders.md).
 3. Optionally cross-check with `python find_extra_author_access.py`. See [find-extra-author-access.md](references/find-extra-author-access.md).
-4. Save the result as `data/remove-access.csv` and run `python -m drive_audit.commands --config data/config.yml remove_access`. See [remove-access.md](references/remove-access.md).
+4. Dry-run, then apply: `python -m drive_audit.commands --config data/config.yml remove_access --csv-file data/remove-access-inactive-folders.csv --dry-run`, review, then re-run without `--dry-run`. See [remove-access.md](references/remove-access.md).
+
+Recipe 5 — Revoke all direct access of a single user (offboarding)
+
+1. Refresh `data/permissions.csv` via `audit-scan`.
+2. Slice the snapshot for the email with `filter_permissions --emails user@example.com --csv-save data/remove-access-<slug>.csv`.
+3. Dry-run `remove_access --csv-file data/remove-access-<slug>.csv --dry-run` and review the root/inherited split.
+4. Apply with `remove_access --csv-file data/remove-access-<slug>.csv`.
+5. Re-run `audit-scan` and confirm the email no longer appears in `permissions.csv`.
+
+See [remove-user-access.md](references/remove-user-access.md) for the full runbook.
 
 ## Reference Files
 
-Per-command runbooks live in `references/`:
-
-- CLI commands (one file per command under `python -m drive_audit.commands ...` plus the main scan) — created in Task 3.
-- Standalone scripts (one file per `.py` script in the repo root) — created in Task 4.
+Per-command runbooks live in `references/` — one file per CLI command and one per standalone script. Follow the link in the Quick Reference table to jump to a specific runbook.

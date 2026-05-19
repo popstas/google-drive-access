@@ -31,7 +31,7 @@ Paths are constants at the top of the script (`check_compare_results.py:12-14`).
 .venv/bin/python check_compare_results.py
 ```
 
-Exit code 0 = both counters decreased. Exit code 1 = otherwise (use as a rollback signal in a wrapper script).
+Exit code 0 = both counters decreased OR no previous baseline (first run). Exit code 1 = a previous baseline exists and at least one counter did not decrease (use as a rollback signal in a wrapper script).
 
 ## Outputs
 
@@ -39,7 +39,7 @@ Exit code 0 = both counters decreased. Exit code 1 = otherwise (use as a rollbac
 |----------|-------------|
 | `data/.compare_results.json` | `{"new_only": int, "old_only": int}` — overwritten on every run |
 | stdout | Old vs new counts, verdict (`SUCCESS` / `PARTIAL` / `WARNING`), deltas |
-| exit code | 0 — both decreased; 1 — otherwise |
+| exit code | 0 — both decreased or no baseline; 1 — baseline exists and at least one counter did not decrease |
 
 ## Pitfalls
 

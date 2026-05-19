@@ -2,7 +2,7 @@
 
 ## Purpose
 
-Re-query Google Drive for the latest metadata of a specific set of files (by `file_id` or `location`), without running a full drive audit. Produces a small results CSV instead of refreshing `files.csv`.
+Re-query Google Drive for the latest metadata of a specific set of files (by `file_id`), without running a full drive audit. Produces a small results CSV instead of refreshing `files.csv`.
 
 ## When to use
 
@@ -16,13 +16,11 @@ CLI flags:
 
 | Flag | Description |
 |------|-------------|
-| `--csv-file <path>` | CSV with a `file_id` column (preferred) or `location` column |
+| `--csv-file <path>` | CSV with a `file_id` column (rows missing it are silently skipped) |
 | `--file-ids <ID> <ID> ...` | Space-separated list of file IDs (alternative to `--csv-file`) |
 | `--output <path>` | Results CSV path (default `data/recheck_results.csv`) |
-| `--config <path>` | Config (Drive auth) |
-| `--debug` | Verbose logging |
 
-At least one of `--csv-file` or `--file-ids` is required.
+At least one of `--csv-file` or `--file-ids` is required. Global flags `--config` / `--debug` go before the subcommand (see SKILL.md Quick Reference).
 
 ## Command line
 
@@ -50,6 +48,7 @@ python -m drive_audit.commands --config data/config.yml recheck_files \
 
 ## Pitfalls
 
+- Only the `file_id` column is read from `--csv-file` — a CSV containing only `location` will produce a "No file IDs to recheck" warning and no output. Use the standard `compare_only_*.csv` (which has both columns) or pre-populate `file_id`.
 - Large input lists can hit Drive API rate limits — split the input or rerun on the error subset.
 - An invalid or revoked-access `file_id` is logged as an error row and the rest continue.
 - This command requires service-account access; pure-local filtering of an existing CSV belongs in `filter_permissions` instead.

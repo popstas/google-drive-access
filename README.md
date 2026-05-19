@@ -289,3 +289,9 @@ Files are saved to the `output.dir` (default `./data`):
 - `drive_audit.yml`: Hierarchical structure and full details.
 - `files.csv`: Flat list of files with policy flags.
 - `permissions.csv`: Detailed permission records.
+
+## Claude Code Skill
+
+A Claude Code skill at `skills/google-drive-access/SKILL.md` maps natural-language tasks ("compare two scans", "find authors on inactive folders") to the right CLI command or standalone script. Per-command runbooks live in `skills/google-drive-access/references/`; detailed Russian use-cases remain in `data/use-cases/`.
+
+To use it, copy or symlink `skills/google-drive-access/` into `~/.claude/skills/`.

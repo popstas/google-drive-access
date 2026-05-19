@@ -48,5 +48,5 @@ python -m drive_audit.commands --config data/config.yml filter_permissions \
 
 ## Pitfalls
 
-- Exact match only — case-sensitive and no wildcards. Typos in `--emails` silently produce an empty CSV.
+- Exact match only — case-insensitive (both sides lowercased) and no wildcards. Typos in `--emails` silently produce an empty CSV.
 - This command does not mutate Drive; pair it with `remove_access` if you want the matching rows actually revoked.

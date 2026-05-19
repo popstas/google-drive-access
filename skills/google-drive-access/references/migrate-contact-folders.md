@@ -11,10 +11,19 @@ After moving the Shared Drive (e.g. to a new corporate drive), update Planfix co
 
 ## Inputs
 
+Input CSV (`data/contacts-with-old-folder.csv` by default — path is hardcoded in `migrate_contact_folders()`):
+
+| Column | Description |
+|--------|-------------|
+| `Дополнительная информация` | Free-text field containing an old-drive folder URL (used to extract the old folder ID) |
+| `Ссылка на Google Drive папку клиента` | Populated by the script with the new folder URL or an `error: ...` message; rows already populated are skipped |
+
+The CSV is **rewritten in place** on every run regardless of `--write-to-contacts` — back it up first.
+
 Config (`data/config.yml`):
 
-- The active config points at the **new** drive. The old drive's config is usually `data/config_old_folder.yml` and is referenced from the active one.
-- Planfix endpoints under `planfix.*` are required when running with `--write-to-contacts`:
+- The active config points at the **new** drive. Old-drive folder IDs come from the input CSV's `Дополнительная информация` column and are looked up through the same service-account credentials, so the service account needs read access to both drives.
+- Planfix endpoints under `planfix.*` are only required when running with `--write-to-contacts`; without that flag, Planfix is not contacted at all:
 
 ```yaml
 planfix:
@@ -27,20 +36,23 @@ planfix:
   getClientTask:
     url: "https://planfix.example.com/client-task"
     token: "<TOKEN>"
+  updateContact:
+    url: "https://planfix.example.com/update-contact"
+    token: "<TOKEN>"
   role: "writer"
   timeout: 120
 ```
 
 CLI flags:
 
-- `--config <path>`
-- `--write-to-contacts` — actually update Planfix; without it the run is dry / read-only on Planfix
-- `--debug`
+- `--write-to-contacts` — actually update Planfix contacts (calls `planfix.update_contact` to PUT/POST the new folder URL). Without it, Planfix is **not** contacted at all; the script only resolves folder IDs against Google Drive and rewrites the local CSV.
+
+Global flags `--config` / `--debug` go before the subcommand (see SKILL.md Quick Reference).
 
 ## Command line
 
 ```bash
-# Preview — never writes to Planfix
+# Preview: no Planfix calls at all; resolves folder IDs via Drive and rewrites the local CSV
 python -m drive_audit.commands --config data/config.yml migrate_contact_folders
 
 # Apply: writes the new folder URL into each contact in Planfix
@@ -57,6 +69,7 @@ python -m drive_audit.commands --config data/config.yml migrate_contact_folders 
 
 ## Pitfalls
 
+- The input CSV is rewritten in place every run — even without `--write-to-contacts`. "Preview" means "no Planfix writes"; local CSV is still mutated. Back up the CSV before each run.
 - Always do a preview run first and skim the log for duplicate name matches.
 - Duplicate folder names on the new drive cause ambiguous matches — resolve with `merge_client_folders` first.
 - Planfix API errors for individual contacts are caught and logged; the batch continues. Re-run after fixing the underlying contact data.

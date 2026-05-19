@@ -16,10 +16,12 @@ Paths and the similarity threshold live in the script's `__main__` block (`find_
 
 | File | Columns used | Purpose |
 |------|--------------|---------|
-| `data/compare_only_old.csv` | `location`, `file_id`, `name`, `mimeType` | Old-only rows from `compare_files` |
+| `data/compare_only_old.csv` | `location`, `file_id`, `name`, `mimeType` (see note) | Old-only rows from `compare_files` |
 | `data/compare_only_new.csv` | same | New-only rows from `compare_files` |
 
 Threshold default: `0.95`.
+
+Note: the script reads the legacy column name `mimeType`, but `compare_files` (via `export_csv.py`) writes the column as `mime_type`. As a result the `old_mime_type` / `new_mime_type` columns in `data/similar.csv` are currently always empty against real compare output. The `location`-based similarity scoring is unaffected.
 
 ## Command line
 

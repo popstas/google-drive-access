@@ -52,3 +52,4 @@ python -m drive_audit.commands --config data/config.yml drive_links_info \
 - Empty/blank URL rows are preserved in the output with empty Drive columns — easy to filter downstream.
 - Inaccessible folders produce an `error` value in their row; the rest of the run continues.
 - Thousands of URLs may hit Drive rate limits — the cache makes reruns essentially free.
+- The default `--column` value is the Russian string `Ссылка на Google Drive папку клиента` — if your CSV uses a different header (English, etc.), pass `--column "<your header>"`; mismatched headers silently produce empty enrichment columns.

@@ -53,7 +53,7 @@ python -m src.drive_audit.main --config data/config.yml --debug
 | `data/drive_audit.yml` | Hierarchical tree with metadata and policy flags |
 | `data/files.csv` | Flat file list with `location`, `file_id`, policy flags |
 | `data/permissions.csv` | Flat permissions list (empty if `collect_permissions: false`) |
-| `data/app.log` | Loguru log (10 MB rotation, 30-day retention) |
+| `data/app.log` | Loguru log (daily rotation, 30-day retention, zip-compressed) |
 
 ## Pitfalls
 

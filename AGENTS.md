@@ -93,8 +93,15 @@ When modifying compare logic:
 ## Key Files for Common Tasks
 
 - **Adding a new HTTP route:** Create module in `src/drive_audit/http/`, wire in `handler.py` `do_POST` (see `src/drive_audit/http/AGENTS.md`)
-- **Adding a new command:** Create module in `src/drive_audit/commands/`, register in `__init__.py`
+- **Adding a new command:** Create module in `src/drive_audit/commands/`, register in `__init__.py`, document under both `data/use-cases/<name>.md` (Russian) and `skills/google-drive-access/references/<name>.md` (English), and add a row to `skills/google-drive-access/SKILL.md` Quick Reference
 - **Adding translations:** Update `src/drive_audit/translations.py` (both `en` and `ru` sections)
 - **Modifying policies:** Edit `src/drive_audit/policy.py`
 - **Configuration options:** Add dataclass to `model.py`, builder to `config_loader.py`, load in `server.py`, document in `config.example.yml`
 - **Adding Google API operations:** Add method to `drive_files.py` or `drive_permissions.py`, then add facade wrapper in `google_client.py` and update its `__all__`
+
+## Claude Code Skill (`skills/google-drive-access/`)
+
+- `skills/google-drive-access/SKILL.md` — top-level skill with command matrix and triggers
+- `skills/google-drive-access/references/*.md` — per-command/per-script runbooks (English), mirror content from `data/use-cases/*.md` (Russian source of truth)
+- **When changing CLI flags / config keys / outputs:** update `data/use-cases/<name>.md`, `skills/google-drive-access/references/<name>.md`, and `skills/google-drive-access/SKILL.md` together
+- **Anonymization rule:** never put real drive IDs, folder IDs, tokens, Planfix URLs, or non-example emails into skill files — use `<DRIVE_ID>`, `<FOLDER_ID>`, `<TOKEN>`, `https://planfix.example.com/...`, `user@example.com`

@@ -49,7 +49,8 @@ python -m drive_audit.commands --config data/config.yml --debug compare_files \
 | `data/compare_only_new.csv` | Rows present only in `csv_new` |
 | `data/compare_format_mismatches.csv` | Format-conversion candidates (when enabled) |
 | `data/compare_files.log` | Operation log |
-| `data/.compare_results.json` | Machine-readable summary used by `check_compare_results.py` |
+
+Note: `data/.compare_results.json` is written by `check_compare_results.py`, not by `compare_files` itself — run that script afterwards to produce/refresh it.
 
 ## Pitfalls
 
