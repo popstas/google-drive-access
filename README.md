@@ -280,7 +280,7 @@ commands:
     report_csv: "deletions-report.csv"
     allow_folder_delete: false                 # explicit opt-in for recursive folder trash
     use_activity_api: true                     # capture rename actor/time
-    allowed_renamer_domains:                   # optional strict allow-list
+    allowed_renamer_domains:                   # exact email domains; empty/missing allows all
       - "example.com"
 ```
 
@@ -301,9 +301,12 @@ actor. When People returns an empty external profile, the resolver can use
 Drive's `lastModifyingUser` only if its modification timestamp matches the
 rename event within five seconds. The Sheet records separate moderator-facing
 name and email columns; the raw People resource is kept in a hidden technical
-column. A non-empty `allowed_renamer_domains` enables strict fail-closed
-filtering during both scan and apply. This requires Drive Activity API, People
-API, and one of:
+column. If `allowed_renamer_domains` is missing or empty, marked names from all
+resolved or unresolved actors are accepted. A non-empty list allows only exact,
+case-insensitive email-domain matches and enables fail-closed filtering during
+both scan and apply. For example, `example.com` accepts `user@example.com` but
+not `user@sub.example.com`. This requires Drive Activity API, People API, and
+one of:
 
 - service-account scopes `drive.activity.readonly` + `directory.readonly` with
   domain-wide delegation through `delegated_user`;
@@ -319,7 +322,7 @@ python -m drive_audit.commands --config data/config.yml moderate_delete scan
 # Or keep scanning at scan_interval_seconds until Ctrl+C
 python -m drive_audit.commands --config data/config.yml moderate_delete watch
 
-# A reviewer sets approve=yes (or да), then previews apply
+# A reviewer selects approve=yes (or types 1/да), then previews apply
 python -m drive_audit.commands --config data/config.yml moderate_delete apply
 
 # Trash approved, still-current and in-scope items
@@ -334,6 +337,10 @@ header row are frozen, filters and approval dropdowns are enabled, pending/error
 states are highlighted, and technical IDs are hidden at the right. A recognized
 previous queue schema is migrated automatically without losing approvals;
 unknown custom schemas still fail closed.
+
+The visible approval choices are `yes` and `no`. Typed aliases `1`/`да` mean
+`yes`, while `0`/`нет` mean `no`. A real apply changes an explicit refusal to
+`status=rejected`, clears the decision cell, and never trashes that item.
 
 `apply` treats the Sheet as untrusted input. Immediately before trashing it
 re-fetches metadata and verifies the marker, configured Drive/folder ancestry,

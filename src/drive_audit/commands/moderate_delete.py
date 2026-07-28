@@ -21,7 +21,8 @@ from ..model import DriveConfig, ModerateDeleteConfig
 from ..sheets_client import DELETED_HEADERS, SheetsClient, get_sheets_service
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
-APPROVE_VALUES = {"yes", "да"}
+APPROVE_VALUES = {"yes", "1", "да"}
+REJECT_VALUES = {"no", "0", "нет"}
 
 ITEM_FIELDS = (
     "id,name,mimeType,parents,driveId,createdTime,modifiedTime,trashed,size,"
@@ -191,7 +192,7 @@ def _candidate_row(
 
 def _allowed_domains(md_config: ModerateDeleteConfig) -> Set[str]:
     return {
-        domain.strip().lower()
+        domain.strip().casefold().lstrip("@").rstrip(".")
         for domain in md_config.allowed_renamer_domains
         if domain and domain.strip()
     }
@@ -206,8 +207,18 @@ def _validate_config(md_config: ModerateDeleteConfig) -> None:
         raise ValueError(
             "commands.moderate_delete.scan_interval_seconds must be positive"
         )
-    if md_config.allowed_renamer_domains and not md_config.use_activity_api:
+    allowed_domains = _allowed_domains(md_config)
+    if allowed_domains and not md_config.use_activity_api:
         raise ValueError("allowed_renamer_domains requires use_activity_api: true")
+    for domain in allowed_domains:
+        if (
+            not domain
+            or "@" in domain
+            or any(character.isspace() for character in domain)
+        ):
+            raise ValueError(
+                "allowed_renamer_domains must contain email domains, not addresses"
+            )
 
 
 def scan(
@@ -448,17 +459,31 @@ def apply(
         sheets_client.ensure_tabs()
 
     pending = sheets_client.read_pending()
-    approved: List[Dict[str, Any]] = []
-    seen_file_ids: Set[str] = set()
+    decisions: Dict[str, tuple[str, Dict[str, Any]]] = {}
     for row in pending:
-        if row.get("status", "").strip().lower() != "pending":
+        if row.get("status", "").strip().casefold() != "pending":
             continue
-        if row.get("approve", "").strip().lower() not in APPROVE_VALUES:
+        decision = row.get("approve", "").strip().casefold()
+        if decision not in APPROVE_VALUES | REJECT_VALUES:
             continue
         file_id = row.get("file_id", "")
-        if not file_id or file_id in seen_file_ids:
+        if not file_id:
             continue
-        seen_file_ids.add(file_id)
+        previous = decisions.get(file_id)
+        if decision in REJECT_VALUES or previous is None:
+            decisions[file_id] = (decision, row)
+
+    approved: List[Dict[str, Any]] = []
+    rejected_count = 0
+    for file_id, (decision, row) in decisions.items():
+        if decision in REJECT_VALUES:
+            rejected_count += 1
+            if apply:
+                logger.info("Rejected queue item {}", file_id)
+            else:
+                logger.info("[dry-run] would reject queue item {}", file_id)
+            _set_status(sheets_client, file_id, "rejected", apply)
+            continue
         approved.append(row)
 
     roots = set(_scan_roots(drive_config, md_config))
@@ -540,7 +565,7 @@ def apply(
                     metadata,
                 )
             domain = rename_event.renamer_domain if rename_event else ""
-            if domain.lower() not in allowed_domains:
+            if domain.casefold().rstrip(".") not in allowed_domains:
                 logger.warning(
                     "Refusing untrusted or unresolved renamer for {} ({})",
                     name,
@@ -603,9 +628,10 @@ def apply(
             ) from audit_errors[0]
 
     logger.info(
-        "moderate_delete {}: {} items",
+        "moderate_delete {}: {} items, {} rejected",
         "apply" if apply else "dry-run",
         len(deleted_rows),
+        rejected_count,
     )
     return deleted_rows
 
@@ -680,6 +706,7 @@ def run_moderate_delete(args, config_data, drive_config, service) -> None:
 
 __all__ = [
     "APPROVE_VALUES",
+    "REJECT_VALUES",
     "apply",
     "get_file_metadata",
     "report",

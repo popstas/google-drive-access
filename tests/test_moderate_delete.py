@@ -5,7 +5,14 @@ import sys
 import pytest
 
 from drive_audit.commands import parse_args
-from drive_audit.commands.moderate_delete import apply, report, scan, watch
+from drive_audit.commands.moderate_delete import (
+    APPROVE_VALUES,
+    REJECT_VALUES,
+    apply,
+    report,
+    scan,
+    watch,
+)
 from drive_audit.drive_activity import RenameEvent
 from drive_audit.model import DriveConfig, ModerateDeleteConfig
 from drive_audit.sheets_client import (
@@ -493,6 +500,45 @@ def test_scan_records_rename_actor_and_enforces_domain(tmp_path):
     assert resolver.clear_calls == 1
 
 
+def test_scan_allows_every_domain_when_allowlist_is_empty(tmp_path):
+    drive = FakeDriveService(base_tree([item("external", "external +delete", "scope")]))
+    resolver = FakeRenameResolver(
+        {"external": event("other.test", actor="external@other.test")}
+    )
+    _, client = sheets_client()
+
+    candidates = scan(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(use_activity_api=True, allowed_renamer_domains=[]),
+        dry_run=True,
+        rename_resolver=resolver,
+    )
+
+    assert [row["file_id"] for row in candidates] == ["external"]
+
+
+def test_domain_allowlist_normalizes_case_at_sign_and_trailing_dot(tmp_path):
+    drive = FakeDriveService(base_tree([item("file", "file +delete", "scope")]))
+    resolver = FakeRenameResolver({"file": event("example.com")})
+    _, client = sheets_client()
+
+    candidates = scan(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(
+            use_activity_api=True,
+            allowed_renamer_domains=[" @EXAMPLE.COM. "],
+        ),
+        dry_run=True,
+        rename_resolver=resolver,
+    )
+
+    assert [row["file_id"] for row in candidates] == ["file"]
+
+
 def test_strict_scan_blocks_an_existing_row_without_calling_it_marker_removed(
     tmp_path,
 ):
@@ -541,6 +587,10 @@ def test_watch_uses_configured_interval(tmp_path):
     [
         md_config(name_marker=""),
         md_config(scan_interval_seconds=0),
+        md_config(
+            use_activity_api=True,
+            allowed_renamer_domains=["person@example.com"],
+        ),
         md_config(
             use_activity_api=False,
             allowed_renamer_domains=["example.com"],
@@ -664,6 +714,91 @@ def test_apply_deduplicates_file_ids_and_honors_limit(tmp_path):
     assert [row["file_id"] for row in deleted] == ["one", "two"]
     assert [call[0] for call in drive.resource.update_calls] == ["one", "two"]
     assert drive.resource.items["three"]["trashed"] is False
+
+
+def test_apply_accepts_visible_and_hidden_approval_aliases(tmp_path):
+    decisions = {
+        "yes": "yes",
+        "one": "1",
+        "ru-yes": "да",
+        "no": "no",
+        "zero": "0",
+        "ru-no": "нет",
+    }
+    drive = FakeDriveService(
+        base_tree(
+            [item(file_id, f"{file_id} +delete", "scope") for file_id in decisions]
+        )
+    )
+    sheet_service, client = sheets_client()
+    seed_pending(
+        sheet_service,
+        [
+            pending_row(
+                file_id,
+                f"{file_id} +delete",
+                approve=decision,
+            )
+            for file_id, decision in decisions.items()
+        ],
+    )
+
+    preview = apply(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(),
+        apply=False,
+    )
+
+    assert {row["file_id"] for row in preview} == {"yes", "one", "ru-yes"}
+    assert all(row["status"] == "pending" for row in client.read_pending())
+
+    deleted = apply(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(),
+        apply=True,
+    )
+
+    assert {row["file_id"] for row in deleted} == {"yes", "one", "ru-yes"}
+    assert status_by_file(client) == {
+        "yes": "trashed",
+        "one": "trashed",
+        "ru-yes": "trashed",
+        "no": "rejected",
+        "zero": "rejected",
+        "ru-no": "rejected",
+    }
+    assert all(value == "" for value in approval_by_file(client).values())
+    assert APPROVE_VALUES == {"yes", "1", "да"}
+    assert REJECT_VALUES == {"no", "0", "нет"}
+
+
+def test_rejection_wins_for_conflicting_duplicate_decisions(tmp_path):
+    drive = FakeDriveService(base_tree([item("file", "file +delete", "scope")]))
+    sheet_service, client = sheets_client()
+    seed_pending(
+        sheet_service,
+        [
+            pending_row("file", "file +delete", approve="yes"),
+            pending_row("file", "file +delete", approve="no"),
+        ],
+    )
+
+    deleted = apply(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(),
+        apply=True,
+    )
+
+    assert deleted == []
+    assert drive.resource.items["file"]["trashed"] is False
+    assert status_by_file(client)["file"] == "rejected"
+    assert approval_by_file(client)["file"] == ""
 
 
 def test_apply_can_delete_folder_only_when_explicitly_enabled(tmp_path):
@@ -899,4 +1034,13 @@ def test_ensure_tabs_migrates_previous_queue_schema_and_preserves_approval():
     assert service.tabs["deleted"][0] == DELETED_HEADERS
     assert deleted["current_name"] == "deleted +delete"
     assert deleted["renamer_email"] == "renamer@example.com"
-    assert any("setDataValidation" in request for request in service.batch_requests)
+    validation = next(
+        request["setDataValidation"]["rule"]
+        for request in service.batch_requests
+        if "setDataValidation" in request
+    )
+    assert validation["condition"]["values"] == [
+        {"userEnteredValue": "yes"},
+        {"userEnteredValue": "no"},
+    ]
+    assert validation["strict"] is False

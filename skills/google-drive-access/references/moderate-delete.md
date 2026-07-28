@@ -41,7 +41,7 @@ commands:
 | `report_csv` | `deletions-report.csv` | CSV written under `output.dir` |
 | `allow_folder_delete` | `false` | Explicit opt-in for trashing marked folders |
 | `use_activity_api` | `false` | Resolve rename actor/time through Activity + People |
-| `allowed_renamer_domains` | `[]` | Strict actor-domain allow-list; requires Activity mode |
+| `allowed_renamer_domains` | `[]` | Exact actor-domain allow-list; empty/missing allows all actors |
 
 ## Queue synchronization
 
@@ -84,8 +84,12 @@ rename whose `newTitle` equals the current marked name and records:
 - a Drive `lastModifyingUser` fallback only when its modification time matches
   the rename event within five seconds.
 
-A non-empty `allowed_renamer_domains` is fail-closed. Unresolved or external
-renamers are excluded during scan and rejected again during apply.
+If `allowed_renamer_domains` is missing or empty, marker requests from every
+actor are accepted. A non-empty list uses exact, case-insensitive email-domain
+matching and is fail-closed. `example.com` accepts `user@example.com`, not
+`user@sub.example.com`. Unresolved or external renamers are excluded during
+scan and rejected again during apply. A leading `@` or trailing dot in a
+configured domain is normalized; individual email addresses are invalid.
 
 Required Cloud setup:
 
@@ -117,8 +121,14 @@ Invalid rows are not trashed and receive a status such as `marker_removed`,
 `renamer_not_allowed`. Overlapping folder/descendant approvals receive
 `overlap_conflict`. Approval is cleared.
 
-Only rows with `status=pending` and `approve` equal to `yes` or `да`
-(case-insensitive, surrounding whitespace ignored) are considered.
+The visible moderation choices are `yes` and `no`. Typed aliases `1` and `да`
+mean approval; `0` and `нет` mean rejection. Matching is case-insensitive and
+surrounding whitespace is ignored.
+
+Only approved rows with `status=pending` are considered for trashing. During
+`apply --apply`, a negative decision sets `status=rejected`, clears `approve`,
+and leaves Drive untouched. Preview mode reports it without changing the Sheet.
+If duplicate rows for one `file_id` conflict, rejection wins.
 
 ## Commands
 

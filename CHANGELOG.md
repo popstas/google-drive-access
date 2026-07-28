@@ -12,7 +12,11 @@ content directly. They add `+delete` to a file or folder name. The application
 finds those names inside explicitly configured folders and places them in a
 Google Sheet for review.
 
-A moderator reviews the queue and writes `yes` or `да` in the `approve` column.
+A moderator reviews the queue and selects the primary `yes` or `no` choice in
+the `approve` column. Compact and localized values can also be typed:
+`1`/`да` approve and `0`/`нет` reject. A rejection closes the queue row with
+`status=rejected` and cannot trash the item.
+
 The application previews the operation by default. Only an explicit
 `apply --apply` command moves approved items to Google Drive trash. Nothing is
 hard-deleted, so normal Drive trash recovery remains available.
@@ -111,6 +115,13 @@ When `allowed_renamer_domains` is non-empty, the feature fails closed:
 - the actor/domain is queried again immediately before apply;
 - Activity or People API errors prevent trashing.
 
+The allow-list is configured on the server, not in the moderation Sheet.
+Missing or empty `allowed_renamer_domains` permits marker requests from every
+actor. A non-empty list uses exact, case-insensitive email-domain matching:
+`example.com` permits `person@example.com`, but it does not implicitly permit
+`person@sub.example.com`. A leading `@` and trailing dot in configuration are
+normalized. Individual email addresses are rejected as invalid configuration.
+
 Drive Activity can publish a new rename with a short delay. A strict scan may
 therefore reject a newly renamed item until a later cycle.
 
@@ -126,10 +137,17 @@ fields:
 5. path and file timestamps;
 6. technical IDs and domain fields at the right.
 
-The first two columns and header row are frozen. Header filters, a strict
-`yes`/`да` approval dropdown, practical column widths, wrapped long names, and
+The first two columns and header row are frozen. Header filters, a primary
+`yes`/`no` approval dropdown, practical column widths, wrapped long names, and
 status-based row highlighting are added when a Sheet is initialized or migrated.
-Technical IDs are preserved but hidden by default.
+The parser also accepts hidden typed aliases: `1`/`да` for approval and
+`0`/`нет` for rejection. Technical IDs are preserved but hidden by default.
+
+An explicit negative decision is processed only by a real `apply --apply`:
+the row becomes `rejected`, its approval cell is cleared, and Drive is not
+modified. A preview reports the decision without changing either the Sheet or
+Drive. If duplicate rows for the same `file_id` contain conflicting decisions,
+rejection wins.
 
 ### Authentication changes
 
@@ -161,10 +179,11 @@ clients, but they share the credential-type validation.
 | `report_csv` | `deletions-report.csv` | Audit CSV under `output.dir` |
 | `allow_folder_delete` | `false` | Explicit folder-trash opt-in |
 | `use_activity_api` | `false` | Enable rename actor/time resolution |
-| `allowed_renamer_domains` | `[]` | Strict renamer-domain allow-list |
+| `allowed_renamer_domains` | `[]` | Exact renamer-domain allow-list; empty/missing allows all actors |
 
 Validation rejects an empty `sheet_id`, an empty marker, non-positive scan
-intervals, and a domain allow-list without Activity mode.
+intervals, individual email addresses in the domain allow-list, and a non-empty
+domain allow-list without Activity mode.
 
 ### Sheet schema and audit trail
 
@@ -218,15 +237,16 @@ accepted the trash operation.
 
 ### Validation
 
-- 161 repository tests pass.
+- 166 repository tests pass.
 - Black and isort checks pass for all Python source and tests.
 - Python bytecode compilation and dependency checks pass.
 - A wheel builds successfully.
 - CLI parser/help covers all four new actions.
 - Field validation covered scoped trees, marker boundaries, cancellation,
   reactivation, watch intervals, dry-run/live apply, tampered Sheet rows,
-  folder policies, overlap conflicts, strict domains, Activity/People actor
-  resolution, audit recovery, and restoration from Drive trash.
+  folder policies, overlap conflicts, strict domains, approval/rejection aliases,
+  conflicting duplicate decisions, Activity/People actor resolution, audit
+  recovery, and restoration from Drive trash.
 
 See [docs/moderate-delete-setup.md](docs/moderate-delete-setup.md) for a
 credential-safe setup and operating guide.

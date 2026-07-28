@@ -53,7 +53,7 @@ commands:
     report_csv: "deletions-report.csv"         # CSV report written to output.dir
     allow_folder_delete: false                 # folders are queued but cannot be trashed unless explicitly enabled
     use_activity_api: false                    # resolve who renamed the item and when
-    allowed_renamer_domains:                   # optional strict allow-list for the renamer
+    allowed_renamer_domains:                   # optional exact domain allow-list; empty/missing allows everyone
       - "example.com"
     # Rename audit / strict mode requires Cloud setup:
     #   - enable Drive Activity API + People API in the Google Cloud project
@@ -61,8 +61,9 @@ commands:
     #     and configure domain-wide delegation through `delegated_user`
     #   - authorized user: grant drive.activity.readonly + userinfo email/profile;
     #     do not configure `delegated_user`
-    # When allowed_renamer_domains is non-empty, unresolved/external renamers are
-    # excluded during scan and revalidated again immediately before apply.
+    # When allowed_renamer_domains is non-empty, only matching renamer email
+    # domains are accepted. Unresolved/external renamers are excluded during scan
+    # and revalidated again immediately before apply.
 
 output:
   dir: "./data"

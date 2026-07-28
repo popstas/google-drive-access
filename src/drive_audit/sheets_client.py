@@ -356,10 +356,10 @@ class SheetsClient:
                                 "type": "ONE_OF_LIST",
                                 "values": [
                                     {"userEnteredValue": "yes"},
-                                    {"userEnteredValue": "да"},
+                                    {"userEnteredValue": "no"},
                                 ],
                             },
-                            "strict": True,
+                            "strict": False,
                             "showCustomUi": True,
                         },
                     }

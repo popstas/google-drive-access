@@ -10,7 +10,7 @@ an issue, pull request, chat, or committed configuration.
 1. A Drive user adds `+delete` to a file or folder name.
 2. `moderate_delete scan` finds marked items inside configured folder trees.
 3. The application synchronizes candidates to a Google Sheet.
-4. A human reviews the row and writes `yes` or `да` in `approve`.
+4. A human reviews the row and selects `yes` or `no` in `approve`.
 5. `moderate_delete apply` previews the current eligible set.
 6. Only `moderate_delete apply --apply` moves validated items to Drive trash.
 
@@ -204,7 +204,11 @@ Start with:
 - an empty `allowed_renamer_domains` unless actor attribution is already
   verified.
 
-`allowed_renamer_domains` requires `use_activity_api: true`.
+`allowed_renamer_domains` is a server-side policy. If the key is missing or the
+list is empty, every actor may request deletion by renaming. If it contains
+domains, only exact case-insensitive matches are accepted. `example.com`
+accepts `person@example.com`, but not `person@sub.example.com`. Unresolved
+actors fail closed. A non-empty list requires `use_activity_api: true`.
 
 ## 6. Verify configuration without writes
 
@@ -267,7 +271,8 @@ the old approval.
 
 For a synthetic file only:
 
-1. write `yes` or `да` in the row's `approve` cell;
+1. select `yes` in the row's `approve` cell (typed aliases `1` and `да` are
+   also accepted);
 2. run the preview:
 
 ```bash
@@ -277,6 +282,10 @@ python -m drive_audit.commands \
 ```
 
 The command must not trash the item. Review the logs and candidate count.
+
+To refuse a request, select `no` (typed aliases `0` and `нет` are also
+accepted). The preview does not mutate the row. On `apply --apply`, the row
+becomes `rejected`, the approval cell is cleared, and the item is not trashed.
 
 ## 10. Run a controlled live test
 
@@ -396,6 +405,8 @@ Fix the underlying condition and require a new human approval.
 - [ ] Scan roots are explicit and minimal.
 - [ ] `allow_folder_delete` is false unless required.
 - [ ] `max_per_run` is appropriate for the deployment.
+- [ ] `allowed_renamer_domains` is empty intentionally or contains only exact
+      employee email domains.
 - [ ] The operator reviews every approval.
 - [ ] Live apply always follows a dry-run preview.
 - [ ] Trash restoration has been tested with synthetic data.
