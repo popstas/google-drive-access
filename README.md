@@ -295,6 +295,11 @@ cache, so removing `+delete` is observed on the next successful scan. The row is
 marked `marker_removed` and its approval is cleared. Re-adding the marker queues
 the item again with a blank approval.
 
+The scan after an apply removes completed `trashed`, `rejected`,
+`already_trashed`, and `duplicate` rows from `pending`. Deletion audit rows
+remain in `deleted`. If a completed item is marked again, it is queued as a new
+`pending` row with a blank decision.
+
 With `use_activity_api: true`, Drive Activity `activity.query` finds the latest
 rename whose `newTitle` equals the current marked name; People API resolves the
 actor. When People returns an empty external profile, the resolver can use

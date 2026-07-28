@@ -565,6 +565,44 @@ class SheetsClient:
     def read_pending(self) -> List[Dict[str, str]]:
         return self._rows_as_dicts(self._read_values(PENDING_TAB))
 
+    def _delete_pending_rows(self, row_numbers: Iterable[int]) -> int:
+        rows = sorted(set(row_numbers), reverse=True)
+        if not rows:
+            return 0
+
+        metadata = (
+            self._service.spreadsheets().get(spreadsheetId=self._sheet_id).execute()
+        )
+        pending_id = next(
+            (
+                sheet.get("properties", {}).get("sheetId")
+                for sheet in metadata.get("sheets", [])
+                if sheet.get("properties", {}).get("title") == PENDING_TAB
+            ),
+            None,
+        )
+        if pending_id is None:
+            raise ValueError("pending tab is missing")
+
+        requests = [
+            {
+                "deleteDimension": {
+                    "range": {
+                        "sheetId": int(pending_id),
+                        "dimension": "ROWS",
+                        "startIndex": row_number - 1,
+                        "endIndex": row_number,
+                    }
+                }
+            }
+            for row_number in rows
+        ]
+        self._service.spreadsheets().batchUpdate(
+            spreadsheetId=self._sheet_id,
+            body={"requests": requests},
+        ).execute()
+        return len(rows)
+
     def sync_pending(
         self,
         candidates: List[Dict[str, Any]],
@@ -593,13 +631,18 @@ class SheetsClient:
             "out_of_scope": 0,
             "reactivated": 0,
             "deduplicated": 0,
+            "removed": 0,
         }
 
         updates = []
+        terminal_rows = []
         handled_ids: Set[str] = set()
         for row_number, current in enumerate(existing, start=2):
             file_id = current.get("file_id", "")
             if not file_id:
+                continue
+            if current.get("status", "").strip().casefold() in TERMINAL_STATUSES:
+                terminal_rows.append(row_number)
                 continue
             if file_id in handled_ids:
                 updates.extend(
@@ -684,6 +727,7 @@ class SheetsClient:
                     ]
                 },
             ).execute()
+        stats["removed"] = self._delete_pending_rows(terminal_rows)
         return stats
 
     @staticmethod

@@ -210,11 +210,22 @@ class FakeSpreadsheets:
         def execute():
             for request in body.get("requests", []):
                 self.batch_requests.append(request)
-                if "addSheet" not in request:
+                if "addSheet" in request:
+                    title = request["addSheet"]["properties"]["title"]
+                    self.tabs.setdefault(title, [])
+                    self.sheet_ids.setdefault(title, max(self.sheet_ids.values()) + 1)
                     continue
-                title = request["addSheet"]["properties"]["title"]
-                self.tabs.setdefault(title, [])
-                self.sheet_ids.setdefault(title, max(self.sheet_ids.values()) + 1)
+                if "deleteDimension" in request:
+                    dimension = request["deleteDimension"]["range"]
+                    assert dimension["dimension"] == "ROWS"
+                    title = next(
+                        title
+                        for title, sheet_id in self.sheet_ids.items()
+                        if sheet_id == dimension["sheetId"]
+                    )
+                    del self.tabs[title][
+                        dimension["startIndex"] : dimension["endIndex"]
+                    ]
             return {}
 
         return Request(execute)
@@ -427,6 +438,59 @@ def test_scan_removes_marker_from_queue_and_reactivates_on_rename(tmp_path):
     assert status_by_file(client)["file"] == "pending"
     assert approval_by_file(client)["file"] == ""
     assert len(client.read_pending()) == 1
+
+
+def test_scan_removes_terminal_rows_and_requeues_a_new_marker_request(tmp_path):
+    drive = FakeDriveService(base_tree([item("reused", "reused +delete", "scope")]))
+    sheet_service, client = sheets_client()
+    seed_pending(
+        sheet_service,
+        [
+            pending_row(
+                "trashed",
+                "trashed +delete",
+                status="trashed",
+                approve="",
+            ),
+            pending_row(
+                "rejected",
+                "rejected",
+                status="rejected",
+                approve="",
+            ),
+            pending_row(
+                "reused",
+                "old name",
+                status="rejected",
+                approve="",
+            ),
+        ],
+    )
+    sheet_service.tabs["deleted"] = [
+        DELETED_HEADERS,
+        ["deleted"] + [""] * (len(DELETED_HEADERS) - 1),
+    ]
+
+    candidates = scan(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(),
+    )
+
+    rows = client.read_pending()
+    assert [row["file_id"] for row in candidates] == ["reused"]
+    assert len(rows) == 1
+    assert rows[0]["file_id"] == "reused"
+    assert rows[0]["status"] == "pending"
+    assert rows[0]["approve"] == ""
+    assert len(client.read_deleted()) == 1
+    deleted_ranges = [
+        request["deleteDimension"]["range"]
+        for request in sheet_service.batch_requests
+        if "deleteDimension" in request
+    ]
+    assert [entry["startIndex"] for entry in deleted_ranges] == [3, 2, 1]
 
 
 def test_scan_marks_moved_item_out_of_scope(tmp_path):

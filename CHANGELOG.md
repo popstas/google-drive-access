@@ -26,6 +26,12 @@ Removing `+delete` from the name cancels the request automatically on the next
 successful scan. The old approval is cleared and is never silently restored if
 the marker is later added again.
 
+After decisions are applied, the next successful scan physically removes
+completed `trashed`, `rejected`, `already_trashed`, and `duplicate` rows from
+the `pending` tab. The `deleted` audit tab is never cleaned by this operation.
+If the same item is marked again, it receives a fresh `pending` row with no
+approval.
+
 ### Operator workflow
 
 The new `moderate_delete` command has four actions:
@@ -71,6 +77,7 @@ Queue lifecycle changes:
 | Item moved outside the configured roots | `out_of_scope`, approval cleared |
 | Marker added again | Reactivated as `pending`, old approval cleared |
 | Duplicate `file_id` row | Extra row becomes `duplicate` |
+| Terminal row on the next scan | Removed from `pending`; audit remains in `deleted` |
 | Item already in trash | `already_trashed` |
 | Folder deletion disabled | `folder_blocked` |
 | Renamer cannot be verified in strict mode | `renamer_not_allowed` |
@@ -249,7 +256,7 @@ accepted the trash operation.
 
 ### Validation
 
-- 169 repository tests pass.
+- 170 repository tests pass.
 - Black and isort checks pass for all Python source and tests.
 - Python bytecode compilation and dependency checks pass.
 - A wheel builds successfully.

@@ -58,6 +58,10 @@ Rows are keyed by `file_id`:
 - re-adding the marker changes those statuses back to `pending` and clears old
   approval;
 - repeated scans do not duplicate the row.
+- the scan after apply removes terminal `trashed`, `rejected`,
+  `already_trashed`, and `duplicate` rows from `pending`;
+- `deleted` audit rows are retained, and a newly marked completed item receives
+  a fresh `pending` row.
 
 The `pending` columns are:
 
