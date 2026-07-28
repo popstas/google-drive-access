@@ -10,6 +10,19 @@ class ShareFileConfig:
 
 
 @dataclass
+class ModerateDeleteConfig:
+    sheet_id: str = ""
+    name_marker: str = "+delete"
+    scan_roots: List[str] = field(default_factory=list)
+    scan_interval_seconds: int = 300
+    max_per_run: int = 200
+    report_csv: str = "deletions-report.csv"
+    use_activity_api: bool = False
+    allowed_renamer_domains: List[str] = field(default_factory=list)
+    allow_folder_delete: bool = False
+
+
+@dataclass
 class PlanfixEndpointConfig:
     url: str
     token: str

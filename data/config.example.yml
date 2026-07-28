@@ -5,6 +5,7 @@ lang: "en"
 logLevel: "INFO"
 
 google:
+  # Service-account or authorized-user OAuth JSON.
   credentials_file: "data/service-account.json"
   # delegated_user: "admin@company.com"
 
@@ -43,6 +44,25 @@ commands:
       - "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
   move_files_csv:
     csv_file: "data/move_files.csv"
+  moderate_delete:
+    sheet_id: "<GOOGLE_SHEET_ID>"             # Google Sheet for pending/deleted tabs
+    name_marker: "+delete"                     # case-insensitive token; +deleted does not match
+    scan_roots: ["<FOLDER_ID>"]                # only descendants of these folders; empty uses drive.root_folder_id
+    scan_interval_seconds: 300                 # interval used by `moderate_delete watch`
+    max_per_run: 200                           # safety cap on deletions per apply run
+    report_csv: "deletions-report.csv"         # CSV report written to output.dir
+    allow_folder_delete: false                 # folders are queued but cannot be trashed unless explicitly enabled
+    use_activity_api: false                    # resolve who renamed the item and when
+    allowed_renamer_domains:                   # optional strict allow-list for the renamer
+      - "example.com"
+    # Rename audit / strict mode requires Cloud setup:
+    #   - enable Drive Activity API + People API in the Google Cloud project
+    #   - service account: grant drive.activity.readonly + directory.readonly
+    #     and configure domain-wide delegation through `delegated_user`
+    #   - authorized user: grant drive.activity.readonly + userinfo email/profile;
+    #     do not configure `delegated_user`
+    # When allowed_renamer_domains is non-empty, unresolved/external renamers are
+    # excluded during scan and revalidated again immediately before apply.
 
 output:
   dir: "./data"

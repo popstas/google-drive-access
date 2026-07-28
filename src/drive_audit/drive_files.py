@@ -289,6 +289,25 @@ class DriveFiles:
 
         return updated
 
+    def trash_file(self, file_id: str) -> Dict[str, Any]:
+        """
+        Move a file to the trash (reversible). Returns ``{id, trashed}``.
+        """
+        try:
+            return (
+                self._service.files()
+                .update(
+                    fileId=file_id,
+                    body={"trashed": True},
+                    supportsAllDrives=True,
+                    fields="id, trashed",
+                )
+                .execute()
+            )
+        except HttpError as error:
+            logger.error("Failed to trash file {}: {}", file_id, error)
+            raise
+
     def delete_folder(
         self,
         folder_id: str,

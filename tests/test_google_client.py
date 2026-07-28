@@ -6,6 +6,7 @@ from drive_audit.google_client import (
     move_file,
     reset_list_folder_children_cache,
     set_list_folder_children_cache_dir,
+    trash_file,
 )
 
 
@@ -199,6 +200,32 @@ def test_move_file_clears_cached_children():
     )
 
     assert len(service.files_api.list_api.calls) == 4
+
+
+class _FakeFilesUpdate:
+    def __init__(self):
+        self.update_calls = []
+
+    def update(self, **kwargs):
+        self.update_calls.append(kwargs)
+        return _FakeRequest({"id": kwargs.get("fileId"), "trashed": True})
+
+
+class _FakeServiceTrash:
+    def __init__(self):
+        self.files_api = _FakeFilesUpdate()
+
+    def files(self):
+        return self.files_api
+
+
+def test_trash_file_delegates_to_facade():
+    service = _FakeServiceTrash()
+
+    result = trash_file(service, "file-2")
+
+    assert service.files_api.update_calls[0]["body"] == {"trashed": True}
+    assert result == {"id": "file-2", "trashed": True}
 
 
 def test_list_folder_children_persists_to_disk(tmp_path):

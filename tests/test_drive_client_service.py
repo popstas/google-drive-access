@@ -3,23 +3,13 @@ from pathlib import Path
 
 import pytest
 
-from drive_audit.drive_client import get_drive_info, get_service
+from drive_audit import drive_client as drive_client_module
+from drive_audit.drive_client import SCOPES, get_drive_info, get_service
 from drive_audit.model import DriveConfig
 
 
 class DummyCreds:
-    last_path = None
-    last_scopes = None
-
-    @classmethod
-    def from_service_account_file(cls, path, scopes):
-        cls.last_path = path
-        cls.last_scopes = scopes
-        return cls()
-
-    def with_subject(self, subject):
-        self.subject = subject
-        return self
+    pass
 
 
 def _config(tmp_path: Path, delegated_user=None):
@@ -45,9 +35,14 @@ def _config(tmp_path: Path, delegated_user=None):
 
 
 def test_get_service_builds_with_delegated_user(monkeypatch, tmp_path):
-    monkeypatch.setattr(
-        "drive_audit.drive_client.service_account.Credentials", DummyCreds
-    )
+    credentials = DummyCreds()
+    loaded = []
+
+    def fake_load(config, scopes):
+        loaded.append((config, scopes))
+        return credentials
+
+    monkeypatch.setattr(drive_client_module, "load_credentials", fake_load)
     built_with = {}
 
     def fake_build(api, version, credentials):
@@ -62,9 +57,8 @@ def test_get_service_builds_with_delegated_user(monkeypatch, tmp_path):
     service = get_service(config)
 
     assert service == "service"
-    assert DummyCreds.last_path == str(config.credentials_file)
-    assert "drive" in DummyCreds.last_scopes[0]
-    assert getattr(built_with["credentials"], "subject", None) == "delegate@example.com"
+    assert loaded == [(config, SCOPES)]
+    assert built_with["credentials"] is credentials
 
 
 def test_get_drive_info_handles_user_and_shared_drive():

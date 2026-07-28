@@ -15,6 +15,7 @@ Use this skill when the user is working inside the google-drive-access repositor
 - moving files into a public subfolder (by regex or via CSV manifest)
 - comparing two scans (`files.csv` vs `new_files.csv`) and rechecking diffs
 - migrating Planfix contact folders, merging duplicate client folders, deleting empty folders
+- moderated deletion: synchronizing items whose names contain `+delete` into a Sheet and trashing human-approved ones (`moderate_delete`)
 - listing drive link metadata, removing access by user, filtering permissions CSVs
 - one-off standalone scripts in the repo root (`find_*.py`, `check_compare_results.py`, `revert_merge_client_folders.py`)
 
@@ -22,7 +23,7 @@ HTTP endpoints are out of scope for this skill — see `README.md` and `data/use
 
 ## Quick Reference
 
-All 16 single-command scenarios plus 1 composite workflow. CLI commands run as `python -m drive_audit.commands --config data/config.yml <command>` unless noted. Standalone scripts run as `python <script>.py` from the repo root.
+All 17 single-command scenarios plus 1 composite workflow. CLI commands run as `python -m drive_audit.commands --config data/config.yml <command>` unless noted. Standalone scripts run as `python <script>.py` from the repo root.
 
 Note: `--config` and `--debug` are top-level flags of `python -m drive_audit.commands` — they must appear **before** the subcommand name (e.g. `python -m drive_audit.commands --config data/config.yml --debug merge_client_folders ...`). Subcommand-specific flags (`--csv-file`, `--dry-run`, `--emails`, etc.) appear after the subcommand.
 
@@ -39,6 +40,7 @@ Note: `--config` and `--debug` are top-level flags of `python -m drive_audit.com
 | 9 | Resolve drive links to metadata (id, name, path) | `drive_links_info` | [drive-links-info.md](references/drive-links-info.md) | CSV with folder/file URLs |
 | 10 | Remove access entries for users / domains | `remove_access` | [remove-access.md](references/remove-access.md) | `data/remove-access.csv` |
 | 11 | Filter a permissions CSV by exact email (case-insensitive, no wildcards) | `filter_permissions` | [filter-permissions.md](references/filter-permissions.md) | required `--emails user1@example.com,user2@example.com` and `--csv-save <out>`; `--csv-file` defaults to `data/permissions.csv` |
+| 11a | Moderated deletion: synchronize names containing `+delete`, trash human-approved items | `moderate_delete scan\|watch\|apply\|report` | [moderate-delete.md](references/moderate-delete.md) | `scan_roots` limits traversal; `watch` uses `scan_interval_seconds`; removing the marker removes the item from the actionable queue; apply revalidates marker/scope/trash state; Activity + People record and optionally restrict the renamer |
 | 12 | Find authors with extra access beyond their articles | `python find_extra_author_access.py` | [find-extra-author-access.md](references/find-extra-author-access.md) | `science_emails.csv`, `<YYYY-MM-DD>-active_science_articles.csv` (filename hardcoded in script), `permissions.csv` |
 | 13 | Find authors still on inactive folders | `python find_authors_on_inactive_folders.py` | [find-authors-on-inactive-folders.md](references/find-authors-on-inactive-folders.md) | same three CSVs as #12 |
 | 14 | Find similar file pairs between two scans | `python find_similar_files.py` | [find-similar-files.md](references/find-similar-files.md) | `compare_only_old.csv`, `compare_only_new.csv` |

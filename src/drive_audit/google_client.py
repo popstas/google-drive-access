@@ -47,6 +47,7 @@ __all__ = [
     "list_files",
     "list_folder_children",
     "move_file",
+    "trash_file",
     "reset_list_folder_children_cache",
     "set_list_folder_children_cache_dir",
 ]
@@ -146,6 +147,11 @@ def get_file_metadata(service, file_id: str) -> Dict[str, Any]:
 def get_item_info(service, item_id: str) -> Dict[str, Any]:
     facade = _with_facade(service)
     return facade.files.get_item_info(item_id)
+
+
+def trash_file(service, file_id: str) -> Dict[str, Any]:
+    facade = _with_facade(service)
+    return facade.files.trash_file(file_id)
 
 
 def create_anyone_permission(
