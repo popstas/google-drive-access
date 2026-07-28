@@ -8,7 +8,13 @@ from drive_audit.commands import parse_args
 from drive_audit.commands.moderate_delete import apply, report, scan, watch
 from drive_audit.drive_activity import RenameEvent
 from drive_audit.model import DriveConfig, ModerateDeleteConfig
-from drive_audit.sheets_client import DELETED_HEADERS, PENDING_HEADERS, SheetsClient
+from drive_audit.sheets_client import (
+    DELETED_HEADERS,
+    DELETED_HEADERS_V1,
+    PENDING_HEADERS,
+    PENDING_HEADERS_V1,
+    SheetsClient,
+)
 
 FOLDER_MIME = "application/vnd.google-apps.folder"
 DOC_MIME = "application/vnd.google-apps.document"
@@ -166,6 +172,8 @@ class FakeSpreadsheets:
     def __init__(self, tabs=None):
         self.tabs = tabs or {"Sheet1": []}
         self.values_resource = FakeValues(self)
+        self.sheet_ids = {title: index + 100 for index, title in enumerate(self.tabs)}
+        self.batch_requests = []
 
     def spreadsheets(self):
         return self
@@ -174,17 +182,31 @@ class FakeSpreadsheets:
         return self.values_resource
 
     def get(self, spreadsheetId):
+        for title in self.tabs:
+            self.sheet_ids.setdefault(title, max(self.sheet_ids.values()) + 1)
         return Request(
             lambda: {
-                "sheets": [{"properties": {"title": title}} for title in self.tabs]
+                "sheets": [
+                    {
+                        "properties": {
+                            "title": title,
+                            "sheetId": self.sheet_ids[title],
+                        }
+                    }
+                    for title in self.tabs
+                ]
             }
         )
 
     def batchUpdate(self, spreadsheetId, body):
         def execute():
             for request in body.get("requests", []):
+                self.batch_requests.append(request)
+                if "addSheet" not in request:
+                    continue
                 title = request["addSheet"]["properties"]["title"]
                 self.tabs.setdefault(title, [])
+                self.sheet_ids.setdefault(title, max(self.sheet_ids.values()) + 1)
             return {}
 
         return Request(execute)
@@ -199,8 +221,8 @@ class FakeRenameResolver:
     def clear_activity_cache(self):
         self.clear_calls += 1
 
-    def resolve_rename(self, file_id, current_name, marker):
-        self.calls.append((file_id, current_name, marker))
+    def resolve_rename(self, file_id, current_name, marker, file_metadata=None):
+        self.calls.append((file_id, current_name, marker, file_metadata))
         return self.events.get(file_id)
 
 
@@ -322,7 +344,8 @@ def event(
         previous_name=previous_name,
         new_name="new +delete",
         renamed_at="2026-07-27T12:00:00Z",
-        renamed_by=actor,
+        renamed_by=f"Renamer <{actor}>" if "@" in actor else actor,
+        renamer_name="Renamer" if "@" in actor else actor,
         renamer_email=actor if "@" in actor else "",
         renamer_domain=domain,
         person_name="people/1",
@@ -464,7 +487,8 @@ def test_scan_records_rename_actor_and_enforces_domain(tmp_path):
     )
 
     assert [row["file_id"] for row in candidates] == ["allowed"]
-    assert candidates[0]["renamed_by"] == "renamer@example.com"
+    assert candidates[0]["renamer_name"] == "Renamer"
+    assert candidates[0]["renamer_email"] == "renamer@example.com"
     assert candidates[0]["renamed_at"] == "2026-07-27T12:00:00Z"
     assert resolver.clear_calls == 1
 
@@ -764,20 +788,24 @@ def test_apply_rechecks_strict_renamer_domain(tmp_path):
 
 def test_report_rebuilds_csv(tmp_path):
     sheet_service, client = sheets_client()
+    deleted_row = {
+        "deleted_at": "deleted",
+        "approved_value": "yes",
+        "previous_name": "old name",
+        "current_name": "name +delete",
+        "item_type": "file",
+        "link": "https://drive.google.com/file/d/file/view",
+        "renamer_name": "Renamer",
+        "renamer_email": "renamer@example.com",
+        "renamed_at": "renamed",
+        "path": "/Target/name",
+        "created_at": "created",
+        "modified_at": "modified",
+        "file_id": "file",
+    }
     sheet_service.tabs["deleted"] = [
         DELETED_HEADERS,
-        [
-            "file",
-            "file",
-            "name",
-            "/Target/name",
-            "created",
-            "modified",
-            "deleted",
-            "yes",
-            "renamer@example.com",
-            "renamed",
-        ],
+        [deleted_row[header] for header in DELETED_HEADERS],
     ]
     sheet_service.tabs["pending"] = [PENDING_HEADERS]
 
@@ -787,7 +815,8 @@ def test_report_rebuilds_csv(tmp_path):
     with (tmp_path / "deletions.csv").open(encoding="utf-8") as handle:
         written = list(csv.DictReader(handle))
     assert written[0]["file_id"] == "file"
-    assert written[0]["renamed_by"] == "renamer@example.com"
+    assert written[0]["renamer_name"] == "Renamer"
+    assert written[0]["renamer_email"] == "renamer@example.com"
 
 
 def test_ensure_tabs_rejects_old_or_custom_schema_without_overwriting_it():
@@ -814,3 +843,60 @@ def test_ensure_tabs_rejects_old_or_custom_schema_without_overwriting_it():
         client.ensure_tabs()
 
     assert service.tabs["pending"] == original
+
+
+def test_ensure_tabs_migrates_previous_queue_schema_and_preserves_approval():
+    pending_values = {
+        "file_id": "file",
+        "item_type": "file",
+        "name": "new +delete",
+        "path": "/Target/new +delete",
+        "scan_root_id": "scope",
+        "created": "created",
+        "modified": "modified",
+        "size": "123",
+        "renamed_by": "people/123",
+        "renamer_domain": "",
+        "renamed_at": "renamed",
+        "previous_name": "old",
+        "link": "https://drive.google.com/file/d/file/view",
+        "status": "pending",
+        "approve": "yes",
+    }
+    deleted_values = {
+        "file_id": "deleted-file",
+        "item_type": "file",
+        "name": "deleted +delete",
+        "path": "/Target/deleted +delete",
+        "created": "created",
+        "modified": "modified",
+        "deleted_at": "deleted",
+        "approved_value": "да",
+        "renamed_by": "renamer@example.com",
+        "renamed_at": "renamed",
+    }
+    service, client = sheets_client(
+        {
+            "pending": [
+                PENDING_HEADERS_V1,
+                [pending_values[header] for header in PENDING_HEADERS_V1],
+            ],
+            "deleted": [
+                DELETED_HEADERS_V1,
+                [deleted_values[header] for header in DELETED_HEADERS_V1],
+            ],
+        }
+    )
+
+    client.ensure_tabs()
+
+    pending = client.read_pending()[0]
+    deleted = client.read_deleted()[0]
+    assert service.tabs["pending"][0] == PENDING_HEADERS
+    assert pending["approve"] == "yes"
+    assert pending["current_name"] == "new +delete"
+    assert pending["renamer_person_id"] == "people/123"
+    assert service.tabs["deleted"][0] == DELETED_HEADERS
+    assert deleted["current_name"] == "deleted +delete"
+    assert deleted["renamer_email"] == "renamer@example.com"
+    assert any("setDataValidation" in request for request in service.batch_requests)

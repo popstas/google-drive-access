@@ -68,6 +68,27 @@ class FakePeopleService:
         return self.resource
 
 
+class FakeDriveResource:
+    def __init__(self, metadata):
+        self.metadata = metadata
+        self.calls = []
+
+    def get(self, fileId, **kwargs):
+        self.calls.append((fileId, kwargs))
+        result = self.metadata[fileId]
+        if isinstance(result, Exception):
+            return Request(error=result)
+        return Request(result=result)
+
+
+class FakeDriveService:
+    def __init__(self, metadata):
+        self.resource = FakeDriveResource(metadata)
+
+    def files(self):
+        return self.resource
+
+
 class DummyCredentials:
     def __init__(self):
         self.subject = None
@@ -206,7 +227,9 @@ def test_resolver_uses_singular_activity_resource_and_rename_filter():
     assert event.previous_name == "report.docx"
     assert event.new_name == "report +delete.docx"
     assert event.renamed_at == "2026-07-27T10:00:00Z"
-    assert event.renamed_by == "renamer@example.com"
+    assert event.renamed_by == "Renamer <renamer@example.com>"
+    assert event.renamer_name == "Renamer"
+    assert event.renamer_email == "renamer@example.com"
     assert event.renamer_domain == "example.com"
     call = activity.resource.calls[0]
     assert call["itemName"] == "items/file-1"
@@ -315,6 +338,87 @@ def test_resolver_returns_none_for_nonmatching_or_api_error():
         )
         is None
     )
+
+
+def test_resolver_uses_matching_drive_last_modifier_for_external_actor():
+    activity = FakeActivityService(
+        {
+            "": {
+                "activities": [
+                    rename_activity(
+                        "old",
+                        "new +delete",
+                        "2026-07-27T10:00:00.200Z",
+                        person_name="people/external",
+                    )
+                ]
+            }
+        }
+    )
+    people = FakePeopleService({"people/external": {"names": [], "emailAddresses": []}})
+    drive = FakeDriveService(
+        {
+            "file-1": {
+                "modifiedTime": "2026-07-27T10:00:00Z",
+                "lastModifyingUser": {
+                    "displayName": "External User",
+                    "emailAddress": "external@example.com",
+                },
+            }
+        }
+    )
+
+    event = RenameActivityResolver(activity, people, drive).resolve_rename(
+        "file-1",
+        "new +delete",
+        "+delete",
+    )
+
+    assert event is not None
+    assert event.renamer_name == "External User"
+    assert event.renamer_email == "external@example.com"
+    assert event.renamer_domain == "example.com"
+    assert event.renamed_by == "External User <external@example.com>"
+
+
+def test_resolver_does_not_use_stale_drive_last_modifier():
+    activity = FakeActivityService(
+        {
+            "": {
+                "activities": [
+                    rename_activity(
+                        "old",
+                        "new +delete",
+                        "2026-07-27T10:00:00Z",
+                        person_name="people/external",
+                    )
+                ]
+            }
+        }
+    )
+    people = FakePeopleService({"people/external": {"names": [], "emailAddresses": []}})
+    drive = FakeDriveService(
+        {
+            "file-1": {
+                "modifiedTime": "2026-07-27T10:01:00Z",
+                "lastModifyingUser": {
+                    "displayName": "Later Editor",
+                    "emailAddress": "later@example.com",
+                },
+            }
+        }
+    )
+
+    event = RenameActivityResolver(activity, people, drive).resolve_rename(
+        "file-1",
+        "new +delete",
+        "+delete",
+    )
+
+    assert event is not None
+    assert event.renamer_name == ""
+    assert event.renamer_email == ""
+    assert event.renamed_by == "people/external"
 
     failing = FakeActivityService({"": RuntimeError("API unavailable")})
     assert (

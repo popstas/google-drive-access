@@ -297,8 +297,11 @@ the item again with a blank approval.
 
 With `use_activity_api: true`, Drive Activity `activity.query` finds the latest
 rename whose `newTitle` equals the current marked name; People API resolves the
-actor. The Sheet records `previous_name`, `renamed_by`, `renamer_domain`, and
-`renamed_at`. A non-empty `allowed_renamer_domains` enables strict fail-closed
+actor. When People returns an empty external profile, the resolver can use
+Drive's `lastModifyingUser` only if its modification timestamp matches the
+rename event within five seconds. The Sheet records separate moderator-facing
+name and email columns; the raw People resource is kept in a hidden technical
+column. A non-empty `allowed_renamer_domains` enables strict fail-closed
 filtering during both scan and apply. This requires Drive Activity API, People
 API, and one of:
 
@@ -324,6 +327,13 @@ python -m drive_audit.commands --config data/config.yml moderate_delete apply --
 
 python -m drive_audit.commands --config data/config.yml moderate_delete report
 ```
+
+The queue is formatted for moderation: `approve`, `status`, old/current names,
+type, link, actor, and rename time appear first. The first two columns and the
+header row are frozen, filters and approval dropdowns are enabled, pending/error
+states are highlighted, and technical IDs are hidden at the right. A recognized
+previous queue schema is migrated automatically without losing approvals;
+unknown custom schemas still fail closed.
 
 `apply` treats the Sheet as untrusted input. Immediately before trashing it
 re-fetches metadata and verifies the marker, configured Drive/folder ancestry,

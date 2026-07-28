@@ -13,7 +13,7 @@ SHEETS_SCOPES = ["https://www.googleapis.com/auth/spreadsheets"]
 PENDING_TAB = "pending"
 DELETED_TAB = "deleted"
 
-PENDING_HEADERS = [
+PENDING_HEADERS_V1 = [
     "file_id",
     "item_type",
     "name",
@@ -31,7 +31,7 @@ PENDING_HEADERS = [
     "approve",
 ]
 
-DELETED_HEADERS = [
+DELETED_HEADERS_V1 = [
     "file_id",
     "item_type",
     "name",
@@ -42,6 +42,42 @@ DELETED_HEADERS = [
     "approved_value",
     "renamed_by",
     "renamed_at",
+]
+
+PENDING_HEADERS = [
+    "approve",
+    "status",
+    "previous_name",
+    "current_name",
+    "item_type",
+    "link",
+    "renamer_name",
+    "renamer_email",
+    "renamed_at",
+    "path",
+    "created_at",
+    "modified_at",
+    "size_bytes",
+    "file_id",
+    "scan_root_id",
+    "renamer_domain",
+    "renamer_person_id",
+]
+
+DELETED_HEADERS = [
+    "deleted_at",
+    "approved_value",
+    "previous_name",
+    "current_name",
+    "item_type",
+    "link",
+    "renamer_name",
+    "renamer_email",
+    "renamed_at",
+    "path",
+    "created_at",
+    "modified_at",
+    "file_id",
 ]
 
 TERMINAL_STATUSES = {"trashed", "rejected", "already_trashed", "duplicate"}
@@ -116,18 +152,345 @@ class SheetsClient:
             body={"values": values},
         ).execute()
 
-    def _ensure_header_schema(self, tab: str, expected_headers: List[str]) -> None:
+    @staticmethod
+    def _legacy_actor_fields(value: str) -> Dict[str, str]:
+        if "@" in value:
+            return {"renamer_email": value}
+        if value.startswith("people/"):
+            return {"renamer_person_id": value}
+        return {"renamer_name": value} if value else {}
+
+    @classmethod
+    def _migrate_pending_v1(cls, row: Dict[str, str]) -> Dict[str, str]:
+        migrated = {
+            "approve": row.get("approve", ""),
+            "status": row.get("status", ""),
+            "previous_name": row.get("previous_name", ""),
+            "current_name": row.get("name", ""),
+            "item_type": row.get("item_type", ""),
+            "link": row.get("link", ""),
+            "renamed_at": row.get("renamed_at", ""),
+            "path": row.get("path", ""),
+            "created_at": row.get("created", ""),
+            "modified_at": row.get("modified", ""),
+            "size_bytes": row.get("size", ""),
+            "file_id": row.get("file_id", ""),
+            "scan_root_id": row.get("scan_root_id", ""),
+            "renamer_domain": row.get("renamer_domain", ""),
+        }
+        migrated.update(cls._legacy_actor_fields(row.get("renamed_by", "")))
+        return migrated
+
+    @classmethod
+    def _migrate_deleted_v1(cls, row: Dict[str, str]) -> Dict[str, str]:
+        migrated = {
+            "deleted_at": row.get("deleted_at", ""),
+            "approved_value": row.get("approved_value", ""),
+            "previous_name": "",
+            "current_name": row.get("name", ""),
+            "item_type": row.get("item_type", ""),
+            "link": "",
+            "renamed_at": row.get("renamed_at", ""),
+            "path": row.get("path", ""),
+            "created_at": row.get("created", ""),
+            "modified_at": row.get("modified", ""),
+            "file_id": row.get("file_id", ""),
+        }
+        migrated.update(cls._legacy_actor_fields(row.get("renamed_by", "")))
+        return migrated
+
+    def _ensure_header_schema(
+        self,
+        tab: str,
+        expected_headers: List[str],
+        legacy_headers: List[str],
+        migrate_row,
+    ) -> bool:
         values = self._read_values(tab)
         if not values:
             self._replace_tab(tab, expected_headers, [])
-            return
+            return True
         if values[0] == expected_headers:
-            return
+            return False
+        if values[0] == legacy_headers:
+            legacy_rows = self._rows_as_dicts(values)
+            self._replace_tab(
+                tab,
+                expected_headers,
+                [migrate_row(row) for row in legacy_rows],
+            )
+            logger.info("Migrated {} queue schema to moderator layout", tab)
+            return True
 
         raise ValueError(
             f"Unexpected {tab} header schema. Expected {expected_headers}, "
             f"got {values[0]}. Use a new Sheet or migrate it explicitly."
         )
+
+    @staticmethod
+    def _dimension_request(
+        sheet_id: int,
+        start_index: int,
+        pixel_size: int,
+    ) -> Dict[str, Any]:
+        return {
+            "updateDimensionProperties": {
+                "range": {
+                    "sheetId": sheet_id,
+                    "dimension": "COLUMNS",
+                    "startIndex": start_index,
+                    "endIndex": start_index + 1,
+                },
+                "properties": {"pixelSize": pixel_size},
+                "fields": "pixelSize",
+            }
+        }
+
+    @classmethod
+    def _format_requests(
+        cls,
+        sheet_id: int,
+        headers: List[str],
+        widths: List[int],
+        *,
+        row_count: int,
+        frozen_columns: int,
+        hidden_start: Optional[int] = None,
+        approve_column: Optional[int] = None,
+        status_column: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
+        requests: List[Dict[str, Any]] = [
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": len(headers),
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "backgroundColor": {
+                                "red": 0.91,
+                                "green": 0.93,
+                                "blue": 0.95,
+                            },
+                            "textFormat": {
+                                "bold": True,
+                                "foregroundColor": {
+                                    "red": 0.13,
+                                    "green": 0.14,
+                                    "blue": 0.16,
+                                },
+                            },
+                            "verticalAlignment": "MIDDLE",
+                            "wrapStrategy": "WRAP",
+                        }
+                    },
+                    "fields": "userEnteredFormat",
+                }
+            },
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": sheet_id,
+                        "gridProperties": {
+                            "frozenRowCount": 1,
+                            "frozenColumnCount": frozen_columns,
+                        },
+                    },
+                    "fields": (
+                        "gridProperties.frozenRowCount,"
+                        "gridProperties.frozenColumnCount"
+                    ),
+                }
+            },
+            {
+                "setBasicFilter": {
+                    "filter": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 0,
+                            "endRowIndex": row_count,
+                            "startColumnIndex": 0,
+                            "endColumnIndex": len(headers),
+                        }
+                    }
+                }
+            },
+        ]
+        requests.extend(
+            cls._dimension_request(sheet_id, index, width)
+            for index, width in enumerate(widths)
+        )
+
+        if hidden_start is not None:
+            requests.append(
+                {
+                    "updateDimensionProperties": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "dimension": "COLUMNS",
+                            "startIndex": hidden_start,
+                            "endIndex": len(headers),
+                        },
+                        "properties": {"hiddenByUser": True},
+                        "fields": "hiddenByUser",
+                    }
+                }
+            )
+        if approve_column is not None:
+            requests.append(
+                {
+                    "setDataValidation": {
+                        "range": {
+                            "sheetId": sheet_id,
+                            "startRowIndex": 1,
+                            "endRowIndex": row_count,
+                            "startColumnIndex": approve_column,
+                            "endColumnIndex": approve_column + 1,
+                        },
+                        "rule": {
+                            "condition": {
+                                "type": "ONE_OF_LIST",
+                                "values": [
+                                    {"userEnteredValue": "yes"},
+                                    {"userEnteredValue": "да"},
+                                ],
+                            },
+                            "strict": True,
+                            "showCustomUi": True,
+                        },
+                    }
+                }
+            )
+        if status_column is not None:
+            data_range = {
+                "sheetId": sheet_id,
+                "startRowIndex": 1,
+                "endRowIndex": row_count,
+                "startColumnIndex": 0,
+                "endColumnIndex": len(headers),
+            }
+            rules = [
+                (
+                    f'=${_column_letter(status_column)}2="pending"',
+                    {"red": 1.0, "green": 0.96, "blue": 0.78},
+                ),
+                (
+                    (
+                        f'=OR(${_column_letter(status_column)}2="error",'
+                        f'${_column_letter(status_column)}2="out_of_scope",'
+                        f'${_column_letter(status_column)}2="no_access",'
+                        f"${_column_letter(status_column)}2="
+                        '"renamer_not_allowed",'
+                        f'${_column_letter(status_column)}2="overlap_conflict")'
+                    ),
+                    {"red": 0.98, "green": 0.82, "blue": 0.82},
+                ),
+                (
+                    f'=${_column_letter(status_column)}2="marker_removed"',
+                    {"red": 0.93, "green": 0.93, "blue": 0.93},
+                ),
+            ]
+            for formula, color in rules:
+                requests.append(
+                    {
+                        "addConditionalFormatRule": {
+                            "rule": {
+                                "ranges": [data_range],
+                                "booleanRule": {
+                                    "condition": {
+                                        "type": "CUSTOM_FORMULA",
+                                        "values": [{"userEnteredValue": formula}],
+                                    },
+                                    "format": {"backgroundColor": color},
+                                },
+                            },
+                            "index": 0,
+                        }
+                    }
+                )
+        return requests
+
+    def _format_tabs(self, sheet_properties: Dict[str, Dict[str, Any]]) -> None:
+        requests: List[Dict[str, Any]] = []
+        pending_properties = sheet_properties.get(PENDING_TAB) or {}
+        pending_id = pending_properties.get("sheetId")
+        if pending_id is not None:
+            requests.extend(
+                self._format_requests(
+                    int(pending_id),
+                    PENDING_HEADERS,
+                    [
+                        90,
+                        135,
+                        300,
+                        340,
+                        90,
+                        120,
+                        190,
+                        230,
+                        175,
+                        380,
+                        175,
+                        175,
+                        95,
+                        220,
+                        220,
+                        150,
+                        220,
+                    ],
+                    row_count=int(
+                        (pending_properties.get("gridProperties") or {}).get(
+                            "rowCount", 1000
+                        )
+                    ),
+                    frozen_columns=2,
+                    hidden_start=13,
+                    approve_column=0,
+                    status_column=1,
+                )
+            )
+
+        deleted_properties = sheet_properties.get(DELETED_TAB) or {}
+        deleted_id = deleted_properties.get("sheetId")
+        if deleted_id is not None:
+            requests.extend(
+                self._format_requests(
+                    int(deleted_id),
+                    DELETED_HEADERS,
+                    [
+                        175,
+                        150,
+                        300,
+                        340,
+                        90,
+                        120,
+                        190,
+                        230,
+                        175,
+                        380,
+                        175,
+                        175,
+                        220,
+                    ],
+                    row_count=int(
+                        (deleted_properties.get("gridProperties") or {}).get(
+                            "rowCount", 1000
+                        )
+                    ),
+                    frozen_columns=0,
+                    hidden_start=12,
+                )
+            )
+
+        if requests:
+            self._service.spreadsheets().batchUpdate(
+                spreadsheetId=self._sheet_id,
+                body={"requests": requests},
+            ).execute()
 
     def ensure_tabs(self) -> None:
         """Create missing tabs and migrate their header schemas when necessary."""
@@ -149,8 +512,31 @@ class SheetsClient:
                 body={"requests": requests},
             ).execute()
 
-        self._ensure_header_schema(PENDING_TAB, PENDING_HEADERS)
-        self._ensure_header_schema(DELETED_TAB, DELETED_HEADERS)
+        pending_changed = self._ensure_header_schema(
+            PENDING_TAB,
+            PENDING_HEADERS,
+            PENDING_HEADERS_V1,
+            self._migrate_pending_v1,
+        )
+        deleted_changed = self._ensure_header_schema(
+            DELETED_TAB,
+            DELETED_HEADERS,
+            DELETED_HEADERS_V1,
+            self._migrate_deleted_v1,
+        )
+
+        if requests or pending_changed or deleted_changed:
+            refreshed = (
+                self._service.spreadsheets().get(spreadsheetId=self._sheet_id).execute()
+            )
+            sheet_properties = {
+                str(sheet.get("properties", {}).get("title") or ""): dict(
+                    sheet.get("properties", {})
+                )
+                for sheet in refreshed.get("sheets", [])
+                if sheet.get("properties", {}).get("sheetId") is not None
+            }
+            self._format_tabs(sheet_properties)
 
     def read_pending(self) -> List[Dict[str, str]]:
         return self._rows_as_dicts(self._read_values(PENDING_TAB))
@@ -369,8 +755,10 @@ class SheetsClient:
 
 __all__ = [
     "DELETED_HEADERS",
+    "DELETED_HEADERS_V1",
     "DELETED_TAB",
     "PENDING_HEADERS",
+    "PENDING_HEADERS_V1",
     "PENDING_TAB",
     "SheetsClient",
     "get_sheets_service",

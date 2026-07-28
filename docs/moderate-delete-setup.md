@@ -345,13 +345,24 @@ Strict mode could not resolve the actor or the actor's domain is outside
 - Activity propagation delay;
 - the configured allow-list.
 
-Do not bypass this status by manually editing `renamed_by` or
-`renamer_domain` in the Sheet. Apply queries the event again.
+Do not bypass this status by manually editing `renamer_email` or
+`renamer_domain` in the Sheet. Apply queries the event again. The raw
+`renamer_person_id` is a hidden technical field.
 
 ### Unexpected Sheet header schema
 
-The Sheet has unknown or legacy columns. Use a new dedicated Sheet or perform a
-reviewed explicit migration. Automatic overwrite is intentionally disabled.
+The immediately previous filename-queue schema is migrated automatically while
+preserving approvals. A Sheet from the old comment prototype or a Sheet with
+unknown custom columns is not overwritten. Use a new dedicated Sheet or perform
+a reviewed explicit migration.
+
+### Actor appears as `people/...`
+
+Run a new scan with Activity mode enabled. People API may return an empty
+profile for an external Google account. In that case the resolver uses
+`lastModifyingUser` only when the Drive modification time matches the rename
+event within five seconds. A successful resolution fills `renamer_name` and
+`renamer_email`; the raw resource remains hidden in `renamer_person_id`.
 
 ### Marked item is missing
 

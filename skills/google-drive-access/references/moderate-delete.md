@@ -61,11 +61,15 @@ Rows are keyed by `file_id`:
 
 The `pending` columns are:
 
-`file_id, item_type, name, path, scan_root_id, created, modified, size, renamed_by, renamer_domain, renamed_at, previous_name, link, status, approve`
+`approve, status, previous_name, current_name, item_type, link, renamer_name, renamer_email, renamed_at, path, created_at, modified_at, size_bytes, file_id, scan_root_id, renamer_domain, renamer_person_id`
 
-Header validation is fail-closed. A Sheet from the old comment-based prototype
-or a Sheet with unknown custom columns is not rewritten automatically; use a
-new Sheet or migrate it explicitly.
+The moderator-facing fields come first. The header and first two columns are
+frozen, filtering and approval dropdowns are enabled, status rows are
+highlighted, and technical IDs are hidden at the right.
+
+The immediately previous filename-queue schema is migrated automatically while
+preserving approvals. Header validation remains fail-closed for the old
+comment-based prototype and unknown custom columns.
 
 ## Rename actor and strict domain
 
@@ -76,7 +80,9 @@ rename whose `newTitle` equals the current marked name and records:
 - previous and current names;
 - rename timestamp;
 - actor identity from Drive Activity;
-- email/domain resolved by People API when available.
+- email/domain resolved by People API when available;
+- a Drive `lastModifyingUser` fallback only when its modification time matches
+  the rename event within five seconds.
 
 A non-empty `allowed_renamer_domains` is fail-closed. Unresolved or external
 renamers are excluded during scan and rejected again during apply.

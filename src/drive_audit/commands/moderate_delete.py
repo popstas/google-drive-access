@@ -25,7 +25,8 @@ APPROVE_VALUES = {"yes", "да"}
 
 ITEM_FIELDS = (
     "id,name,mimeType,parents,driveId,createdTime,modifiedTime,trashed,size,"
-    "capabilities(canTrash)"
+    "capabilities(canTrash),"
+    "lastModifyingUser(displayName,emailAddress,permissionId)"
 )
 
 
@@ -168,21 +169,23 @@ def _candidate_row(
     file_id = str(metadata.get("id") or "")
     item_type = _item_type(metadata)
     return {
-        "file_id": file_id,
-        "item_type": item_type,
-        "name": metadata.get("name", ""),
-        "path": path,
-        "scan_root_id": scan_root_id,
-        "created": metadata.get("createdTime", ""),
-        "modified": metadata.get("modifiedTime", ""),
-        "size": metadata.get("size", ""),
-        "renamed_by": rename_event.renamed_by if rename_event else "",
-        "renamer_domain": rename_event.renamer_domain if rename_event else "",
-        "renamed_at": rename_event.renamed_at if rename_event else "",
-        "previous_name": rename_event.previous_name if rename_event else "",
-        "link": _item_link(file_id, item_type),
-        "status": "pending",
         "approve": "",
+        "status": "pending",
+        "previous_name": rename_event.previous_name if rename_event else "",
+        "current_name": metadata.get("name", ""),
+        "item_type": item_type,
+        "link": _item_link(file_id, item_type),
+        "renamer_name": rename_event.renamer_name if rename_event else "",
+        "renamer_email": rename_event.renamer_email if rename_event else "",
+        "renamed_at": rename_event.renamed_at if rename_event else "",
+        "path": path,
+        "created_at": metadata.get("createdTime", ""),
+        "modified_at": metadata.get("modifiedTime", ""),
+        "size_bytes": metadata.get("size", ""),
+        "file_id": file_id,
+        "scan_root_id": scan_root_id,
+        "renamer_domain": rename_event.renamer_domain if rename_event else "",
+        "renamer_person_id": rename_event.person_name if rename_event else "",
     }
 
 
@@ -237,6 +240,7 @@ def scan(
                 str(metadata.get("id") or ""),
                 name,
                 md_config.name_marker,
+                metadata,
             )
 
         if allowed_domains:
@@ -264,9 +268,12 @@ def scan(
         for candidate in candidates:
             logger.info(
                 "[dry-run] queue {} ({}) renamed_by={} renamed_at={}",
-                candidate["name"],
+                candidate["current_name"],
                 candidate["file_id"],
-                candidate["renamed_by"] or None,
+                candidate["renamer_email"]
+                or candidate["renamer_name"]
+                or candidate["renamer_person_id"]
+                or None,
                 candidate["renamed_at"] or None,
             )
         return candidates
@@ -387,16 +394,31 @@ def _deleted_record(
     row: Dict[str, Any], metadata: Dict[str, Any], deleted_at: str
 ) -> Dict[str, Any]:
     return {
-        "file_id": metadata.get("id", row.get("file_id", "")),
-        "item_type": _item_type(metadata),
-        "name": metadata.get("name", row.get("name", "")),
-        "path": row.get("path", ""),
-        "created": metadata.get("createdTime", row.get("created", "")),
-        "modified": metadata.get("modifiedTime", row.get("modified", "")),
         "deleted_at": deleted_at,
         "approved_value": row.get("approve", ""),
-        "renamed_by": row.get("renamed_by", ""),
+        "previous_name": row.get("previous_name", ""),
+        "current_name": metadata.get(
+            "name",
+            row.get("current_name", ""),
+        ),
+        "item_type": _item_type(metadata),
+        "link": row.get(
+            "link",
+            _item_link(str(metadata.get("id") or ""), _item_type(metadata)),
+        ),
+        "renamer_name": row.get("renamer_name", ""),
+        "renamer_email": row.get("renamer_email", ""),
         "renamed_at": row.get("renamed_at", ""),
+        "path": row.get("path", ""),
+        "created_at": metadata.get(
+            "createdTime",
+            row.get("created_at", ""),
+        ),
+        "modified_at": metadata.get(
+            "modifiedTime",
+            row.get("modified_at", ""),
+        ),
+        "file_id": metadata.get("id", row.get("file_id", "")),
     }
 
 
@@ -512,7 +534,10 @@ def apply(
         if allowed_domains:
             if rename_resolver is not None:
                 rename_event = rename_resolver.resolve_rename(
-                    file_id, name, md_config.name_marker
+                    file_id,
+                    name,
+                    md_config.name_marker,
+                    metadata,
                 )
             domain = rename_event.renamer_domain if rename_event else ""
             if domain.lower() not in allowed_domains:
@@ -530,8 +555,10 @@ def apply(
 
         if rename_event is not None:
             row = dict(row)
-            row["renamed_by"] = rename_event.renamed_by
+            row["renamer_name"] = rename_event.renamer_name
+            row["renamer_email"] = rename_event.renamer_email
             row["renamed_at"] = rename_event.renamed_at
+            row["renamer_person_id"] = rename_event.person_name
         record = _deleted_record(row, metadata, _utcnow_iso())
 
         if not apply:
@@ -597,13 +624,16 @@ def report(
 
 
 def _rename_resolver(
-    drive_config: DriveConfig, md_config: ModerateDeleteConfig
+    drive_config: DriveConfig,
+    md_config: ModerateDeleteConfig,
+    drive_service,
 ) -> Optional[RenameActivityResolver]:
     if not md_config.use_activity_api:
         return None
     return RenameActivityResolver(
         get_activity_service(drive_config),
         get_people_service(drive_config),
+        drive_service,
     )
 
 
@@ -612,7 +642,7 @@ def run_moderate_delete(args, config_data, drive_config, service) -> None:
     _validate_config(md_config)
     sheets_service = get_sheets_service(drive_config)
     sheets_client = SheetsClient(sheets_service, md_config.sheet_id)
-    resolver = _rename_resolver(drive_config, md_config)
+    resolver = _rename_resolver(drive_config, md_config, service)
 
     action = args.action
     if action == "scan":

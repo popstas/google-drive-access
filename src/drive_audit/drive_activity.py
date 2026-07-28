@@ -26,6 +26,7 @@ class RenameEvent:
     new_name: str
     renamed_at: str
     renamed_by: str
+    renamer_name: str
     renamer_email: str
     renamer_domain: str
     person_name: str
@@ -50,9 +51,10 @@ def get_people_service(config: DriveConfig):
 class RenameActivityResolver:
     """Resolve the actor and timestamp of a rename that added ``+delete``."""
 
-    def __init__(self, activity_service, people_service):
+    def __init__(self, activity_service, people_service, drive_service=None):
         self._activity = activity_service
         self._people = people_service
+        self._drive = drive_service
         self._activities_cache: Dict[str, List[Dict[str, Any]]] = {}
         self._profile_cache: Dict[str, Dict[str, str]] = {}
 
@@ -141,48 +143,142 @@ class RenameActivityResolver:
                 return person_name
         return ""
 
-    def _resolve_profile(self, person_name: str) -> Dict[str, str]:
-        if not person_name:
+    @classmethod
+    def _drive_profile(
+        cls,
+        file_id: str,
+        renamed_at: str,
+        metadata: Optional[Dict[str, Any]],
+        drive_service,
+    ) -> Dict[str, str]:
+        if not file_id or not renamed_at:
             return {}
-        if person_name in self._profile_cache:
-            return self._profile_cache[person_name]
 
-        profile: Dict[str, str] = {}
-        try:
-            person = (
-                self._people.people()
-                .get(
-                    resourceName=person_name,
-                    personFields="names,emailAddresses",
+        if metadata is None and drive_service is not None:
+            try:
+                metadata = (
+                    drive_service.files()
+                    .get(
+                        fileId=file_id,
+                        supportsAllDrives=True,
+                        fields=(
+                            "modifiedTime,"
+                            "lastModifyingUser(displayName,emailAddress)"
+                        ),
+                    )
+                    .execute()
                 )
-                .execute()
+            except Exception as error:
+                logger.debug(
+                    "Drive last-modifier lookup failed for {}: {}", file_id, error
+                )
+                return {}
+
+        metadata = metadata or {}
+        modified_at = str(metadata.get("modifiedTime") or "")
+        try:
+            delta = abs(
+                (
+                    cls._time_sort_key(modified_at) - cls._time_sort_key(renamed_at)
+                ).total_seconds()
             )
-        except Exception as error:
-            logger.debug("People lookup failed for {}: {}", person_name, error)
-            self._profile_cache[person_name] = profile
-            return profile
+        except (OverflowError, ValueError):
+            return {}
+        if not modified_at or delta > 5:
+            return {}
 
-        emails = person.get("emailAddresses", []) or []
-        primary_email = next(
-            (entry for entry in emails if (entry.get("metadata") or {}).get("primary")),
-            emails[0] if emails else None,
-        )
-        if primary_email and primary_email.get("value"):
-            profile["email"] = str(primary_email["value"])
-
-        names = person.get("names", []) or []
-        primary_name = next(
-            (entry for entry in names if (entry.get("metadata") or {}).get("primary")),
-            names[0] if names else None,
-        )
-        if primary_name and primary_name.get("displayName"):
-            profile["display_name"] = str(primary_name["displayName"])
-
-        self._profile_cache[person_name] = profile
+        modifier = metadata.get("lastModifyingUser") or {}
+        profile: Dict[str, str] = {}
+        if modifier.get("emailAddress"):
+            profile["email"] = str(modifier["emailAddress"])
+        if modifier.get("displayName"):
+            profile["display_name"] = str(modifier["displayName"])
         return profile
 
+    def _resolve_profile(
+        self,
+        person_name: str,
+        file_id: str,
+        renamed_at: str,
+        file_metadata: Optional[Dict[str, Any]],
+    ) -> Dict[str, str]:
+        if not person_name:
+            return {}
+
+        cached = self._profile_cache.get(person_name)
+        if cached is None:
+            cached = {}
+            try:
+                person = (
+                    self._people.people()
+                    .get(
+                        resourceName=person_name,
+                        personFields="names,emailAddresses",
+                    )
+                    .execute()
+                )
+            except Exception as error:
+                logger.debug("People lookup failed for {}: {}", person_name, error)
+                person = {}
+
+            emails = person.get("emailAddresses", []) or []
+            primary_email = next(
+                (
+                    entry
+                    for entry in emails
+                    if (entry.get("metadata") or {}).get("primary")
+                ),
+                emails[0] if emails else None,
+            )
+            if primary_email and primary_email.get("value"):
+                cached["email"] = str(primary_email["value"])
+
+            names = person.get("names", []) or []
+            primary_name = next(
+                (
+                    entry
+                    for entry in names
+                    if (entry.get("metadata") or {}).get("primary")
+                ),
+                names[0] if names else None,
+            )
+            if primary_name and primary_name.get("displayName"):
+                cached["display_name"] = str(primary_name["displayName"])
+
+            self._profile_cache[person_name] = cached
+
+        profile = dict(cached)
+        if not profile.get("email") or not profile.get("display_name"):
+            fallback = self._drive_profile(
+                file_id,
+                renamed_at,
+                file_metadata,
+                self._drive,
+            )
+            profile.setdefault("email", fallback.get("email", ""))
+            profile.setdefault("display_name", fallback.get("display_name", ""))
+        return {key: value for key, value in profile.items() if value}
+
+    @staticmethod
+    def _renamed_by(profile: Dict[str, str], person_name: str) -> str:
+        email = profile.get("email", "")
+        display_name = profile.get("display_name", "")
+        if display_name and email:
+            return f"{display_name} <{email}>"
+        if display_name:
+            return display_name
+        if email:
+            return email
+        if person_name == "people/me":
+            return "current-user"
+        return person_name
+
     def resolve_rename(
-        self, file_id: str, current_name: str, marker: str
+        self,
+        file_id: str,
+        current_name: str,
+        marker: str,
+        file_metadata: Optional[Dict[str, Any]] = None,
     ) -> Optional[RenameEvent]:
         """Return the latest rename that produced the current marked name.
 
@@ -214,20 +310,23 @@ class RenameActivityResolver:
                 matching, key=lambda item: self._time_sort_key(item[0])
             )
             person_name = self._person_name(activity)
-            profile = self._resolve_profile(person_name)
-            email = profile.get("email", "")
-            domain = email.rsplit("@", 1)[1].lower() if "@" in email else ""
-            renamed_by = (
-                email
-                or profile.get("display_name")
-                or ("current-user" if person_name == "people/me" else person_name)
+            profile = self._resolve_profile(
+                person_name,
+                file_id,
+                renamed_at,
+                file_metadata,
             )
+            email = profile.get("email", "")
+            display_name = profile.get("display_name", "")
+            domain = email.rsplit("@", 1)[1].lower() if "@" in email else ""
+            renamed_by = self._renamed_by(profile, person_name)
 
             return RenameEvent(
                 previous_name=str(rename.get("oldTitle") or ""),
                 new_name=str(rename.get("newTitle") or current_name),
                 renamed_at=renamed_at,
                 renamed_by=renamed_by,
+                renamer_name=display_name,
                 renamer_email=email,
                 renamer_domain=domain,
                 person_name=person_name,

@@ -99,8 +99,10 @@ Optional Drive Activity integration records who added the marker and when:
   `detail.action_detail_case:RENAME`;
 - the latest rename whose `newTitle` equals the current marked name is used;
 - People API resolves the actor's email and display name;
-- the queue stores `previous_name`, `renamed_by`, `renamer_domain`, and
-  `renamed_at`.
+- when People returns an empty external profile, Drive `lastModifyingUser` is
+  accepted only when its `modifiedTime` is within five seconds of the rename;
+- the queue stores separate `renamer_name`, `renamer_email`,
+  `renamer_domain`, `renamer_person_id`, and `renamed_at` fields.
 
 When `allowed_renamer_domains` is non-empty, the feature fails closed:
 
@@ -111,6 +113,23 @@ When `allowed_renamer_domains` is non-empty, the feature fails closed:
 
 Drive Activity can publish a new rename with a short delay. A strict scan may
 therefore reject a newly renamed item until a later cycle.
+
+### Moderator-oriented Sheet layout
+
+The queue is arranged by the moderator's decision flow rather than internal API
+fields:
+
+1. approval and current status;
+2. previous and current names;
+3. item type and direct Drive link;
+4. actor name, actor email, and rename time;
+5. path and file timestamps;
+6. technical IDs and domain fields at the right.
+
+The first two columns and header row are frozen. Header filters, a strict
+`yes`/`да` approval dropdown, practical column widths, wrapped long names, and
+status-based row highlighting are added when a Sheet is initialized or migrated.
+Technical IDs are preserved but hidden by default.
 
 ### Authentication changes
 
@@ -151,15 +170,15 @@ intervals, and a domain allow-list without Activity mode.
 
 The `pending` tab contains:
 
-`file_id, item_type, name, path, scan_root_id, created, modified, size, renamed_by, renamer_domain, renamed_at, previous_name, link, status, approve`
+`approve, status, previous_name, current_name, item_type, link, renamer_name, renamer_email, renamed_at, path, created_at, modified_at, size_bytes, file_id, scan_root_id, renamer_domain, renamer_person_id`
 
 The `deleted` tab contains:
 
-`file_id, item_type, name, path, created, modified, deleted_at, approved_value, renamed_by, renamed_at`
+`deleted_at, approved_value, previous_name, current_name, item_type, link, renamer_name, renamer_email, renamed_at, path, created_at, modified_at, file_id`
 
-Unknown or legacy header schemas are rejected rather than overwritten. This is
-intentional fail-closed behavior. Operators should use a new Sheet or perform
-an explicit migration.
+The immediately previous filename-queue schema is migrated automatically while
+preserving rows, statuses, and approval values. Unknown or custom schemas are
+still rejected rather than overwritten.
 
 After a successful trash operation, the audit is written to both the Sheet and
 the configured CSV. Audit-write errors are surfaced even when Drive already
@@ -171,9 +190,11 @@ accepted the trash operation.
   - implements scan, watch, apply, report, marker parsing, queue reconciliation,
     scope verification, folder-overlap detection, and audit generation;
 - `src/drive_audit/sheets_client.py`
-  - owns the narrow Sheets v4 queue client and fail-closed schema validation;
+  - owns schema migration, moderator layout, formatting, queue synchronization,
+    and fail-closed validation of unknown schemas;
 - `src/drive_audit/drive_activity.py`
-  - resolves rename events and People profiles with per-scan caching;
+  - resolves rename events and People profiles with per-scan caching plus a
+    timestamp-validated Drive last-modifier fallback;
 - `src/drive_audit/credentials.py`
   - loads service-account or authorized-user credentials and checks scopes;
 - `src/drive_audit/drive_files.py`
@@ -197,7 +218,7 @@ accepted the trash operation.
 
 ### Validation
 
-- 158 repository tests pass.
+- 161 repository tests pass.
 - Black and isort checks pass for all Python source and tests.
 - Python bytecode compilation and dependency checks pass.
 - A wheel builds successfully.
