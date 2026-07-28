@@ -1,6 +1,6 @@
 """Narrow Google Sheets client for the filename-based deletion queue."""
 
-from typing import Any, Dict, Iterable, List, Optional, Set
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple
 
 from googleapiclient.discovery import build
 from loguru import logger
@@ -44,7 +44,7 @@ DELETED_HEADERS_V1 = [
     "renamed_at",
 ]
 
-PENDING_HEADERS = [
+PENDING_HEADERS_V2 = [
     "approve",
     "status",
     "previous_name",
@@ -54,6 +54,26 @@ PENDING_HEADERS = [
     "renamer_name",
     "renamer_email",
     "renamed_at",
+    "path",
+    "created_at",
+    "modified_at",
+    "size_bytes",
+    "file_id",
+    "scan_root_id",
+    "renamer_domain",
+    "renamer_person_id",
+]
+
+PENDING_HEADERS = [
+    "approve",
+    "status",
+    "previous_name",
+    "item_type",
+    "link",
+    "renamer_name",
+    "renamer_email",
+    "renamed_at",
+    "current_name",
     "path",
     "created_at",
     "modified_at",
@@ -90,6 +110,7 @@ REACTIVATABLE_STATUSES = {
     "no_access",
     "error",
     "overlap_conflict",
+    "reject_name_unresolved",
 }
 
 
@@ -140,11 +161,6 @@ class SheetsClient:
     ) -> None:
         values = [headers]
         values.extend([str(row.get(header, "")) for header in headers] for row in rows)
-        self._values().clear(
-            spreadsheetId=self._sheet_id,
-            range=tab,
-            body={},
-        ).execute()
         self._values().update(
             spreadsheetId=self._sheet_id,
             range=f"{tab}!A1",
@@ -203,8 +219,12 @@ class SheetsClient:
         self,
         tab: str,
         expected_headers: List[str],
-        legacy_headers: List[str],
-        migrate_row,
+        legacy_schemas: Iterable[
+            Tuple[
+                List[str],
+                Callable[[Dict[str, str]], Dict[str, str]],
+            ]
+        ],
     ) -> bool:
         values = self._read_values(tab)
         if not values:
@@ -212,15 +232,16 @@ class SheetsClient:
             return True
         if values[0] == expected_headers:
             return False
-        if values[0] == legacy_headers:
-            legacy_rows = self._rows_as_dicts(values)
-            self._replace_tab(
-                tab,
-                expected_headers,
-                [migrate_row(row) for row in legacy_rows],
-            )
-            logger.info("Migrated {} queue schema to moderator layout", tab)
-            return True
+        for legacy_headers, migrate_row in legacy_schemas:
+            if values[0] == legacy_headers:
+                legacy_rows = self._rows_as_dicts(values)
+                self._replace_tab(
+                    tab,
+                    expected_headers,
+                    [migrate_row(row) for row in legacy_rows],
+                )
+                logger.info("Migrated {} queue schema to moderator layout", tab)
+                return True
 
         raise ValueError(
             f"Unexpected {tab} header schema. Expected {expected_headers}, "
@@ -385,6 +406,8 @@ class SheetsClient:
                         f'${_column_letter(status_column)}2="no_access",'
                         f"${_column_letter(status_column)}2="
                         '"renamer_not_allowed",'
+                        f"${_column_letter(status_column)}2="
+                        '"reject_name_unresolved",'
                         f'${_column_letter(status_column)}2="overlap_conflict")'
                     ),
                     {"red": 0.98, "green": 0.82, "blue": 0.82},
@@ -427,12 +450,12 @@ class SheetsClient:
                         90,
                         135,
                         300,
-                        340,
                         90,
                         120,
                         190,
                         230,
                         175,
+                        340,
                         380,
                         175,
                         175,
@@ -515,14 +538,15 @@ class SheetsClient:
         pending_changed = self._ensure_header_schema(
             PENDING_TAB,
             PENDING_HEADERS,
-            PENDING_HEADERS_V1,
-            self._migrate_pending_v1,
+            [
+                (PENDING_HEADERS_V2, lambda row: row),
+                (PENDING_HEADERS_V1, self._migrate_pending_v1),
+            ],
         )
         deleted_changed = self._ensure_header_schema(
             DELETED_TAB,
             DELETED_HEADERS,
-            DELETED_HEADERS_V1,
-            self._migrate_deleted_v1,
+            [(DELETED_HEADERS_V1, self._migrate_deleted_v1)],
         )
 
         if requests or pending_changed or deleted_changed:
@@ -685,9 +709,14 @@ class SheetsClient:
         return changes
 
     def update_status(
-        self, file_id: str, status: str, *, clear_approve: bool = False
+        self,
+        file_id: str,
+        status: str,
+        *,
+        clear_approve: bool = False,
+        current_name: Optional[str] = None,
     ) -> bool:
-        """Update every matching row, optionally clearing its approval."""
+        """Update every matching row and optional moderator-facing fields."""
         values = self._read_values(PENDING_TAB)
         if not values:
             return False
@@ -696,6 +725,7 @@ class SheetsClient:
             file_index = headers.index("file_id")
             status_index = headers.index("status")
             approve_index = headers.index("approve")
+            current_name_index = headers.index("current_name")
         except ValueError:
             return False
 
@@ -717,6 +747,16 @@ class SheetsClient:
                             f"{PENDING_TAB}!{_column_letter(approve_index)}{offset}"
                         ),
                         "values": [[""]],
+                    }
+                )
+            if current_name is not None:
+                updates.append(
+                    {
+                        "range": (
+                            f"{PENDING_TAB}!"
+                            f"{_column_letter(current_name_index)}{offset}"
+                        ),
+                        "values": [[current_name]],
                     }
                 )
 
@@ -759,6 +799,7 @@ __all__ = [
     "DELETED_TAB",
     "PENDING_HEADERS",
     "PENDING_HEADERS_V1",
+    "PENDING_HEADERS_V2",
     "PENDING_TAB",
     "SheetsClient",
     "get_sheets_service",

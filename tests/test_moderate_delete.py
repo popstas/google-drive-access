@@ -20,6 +20,7 @@ from drive_audit.sheets_client import (
     DELETED_HEADERS_V1,
     PENDING_HEADERS,
     PENDING_HEADERS_V1,
+    PENDING_HEADERS_V2,
     SheetsClient,
 )
 
@@ -241,6 +242,7 @@ def item(
     mime_type=DOC_MIME,
     trashed=False,
     can_trash=True,
+    can_rename=True,
     drive_id=None,
 ):
     result = {
@@ -252,7 +254,10 @@ def item(
         "modifiedTime": "2026-07-27T11:00:00Z",
         "trashed": trashed,
         "size": "123",
-        "capabilities": {"canTrash": can_trash},
+        "capabilities": {
+            "canTrash": can_trash,
+            "canRename": can_rename,
+        },
     }
     if drive_id is not None:
         result["driveId"] = drive_id
@@ -315,7 +320,7 @@ def pending_row(file_id, name, *, item_type="file", approve="yes", **overrides):
         {
             "file_id": file_id,
             "item_type": item_type,
-            "name": name,
+            "current_name": name,
             "path": f"/Target/{name}",
             "scan_root_id": "scope",
             "status": "pending",
@@ -753,6 +758,7 @@ def test_apply_accepts_visible_and_hidden_approval_aliases(tmp_path):
 
     assert {row["file_id"] for row in preview} == {"yes", "one", "ru-yes"}
     assert all(row["status"] == "pending" for row in client.read_pending())
+    assert drive.resource.update_calls == []
 
     deleted = apply(
         drive,
@@ -772,8 +778,79 @@ def test_apply_accepts_visible_and_hidden_approval_aliases(tmp_path):
         "ru-no": "rejected",
     }
     assert all(value == "" for value in approval_by_file(client).values())
+    assert drive.resource.items["no"]["name"] == "no"
+    assert drive.resource.items["zero"]["name"] == "zero"
+    assert drive.resource.items["ru-no"]["name"] == "ru-no"
     assert APPROVE_VALUES == {"yes", "1", "да"}
     assert REJECT_VALUES == {"no", "0", "нет"}
+
+
+def test_rejection_restores_activity_previous_name_when_marker_is_entire_name(
+    tmp_path,
+):
+    drive = FakeDriveService(base_tree([item("file", "+delete", "scope")]))
+    sheet_service, client = sheets_client()
+    seed_pending(
+        sheet_service,
+        [
+            pending_row(
+                "file",
+                "+delete",
+                approve="no",
+                previous_name="Sheet fallback",
+            )
+        ],
+    )
+    resolver = FakeRenameResolver({"file": event(previous_name="Last non-empty name")})
+
+    deleted = apply(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(use_activity_api=True),
+        apply=True,
+        rename_resolver=resolver,
+    )
+
+    row = client.read_pending()[0]
+    assert deleted == []
+    assert drive.resource.items["file"]["name"] == "Last non-empty name"
+    assert row["current_name"] == "Last non-empty name"
+    assert row["status"] == "rejected"
+    assert row["approve"] == ""
+
+
+def test_rejection_does_not_rename_without_drive_permission(tmp_path):
+    drive = FakeDriveService(
+        base_tree(
+            [
+                item(
+                    "file",
+                    "file +delete",
+                    "scope",
+                    can_rename=False,
+                )
+            ]
+        )
+    )
+    sheet_service, client = sheets_client()
+    seed_pending(
+        sheet_service,
+        [pending_row("file", "file +delete", approve="no")],
+    )
+
+    deleted = apply(
+        drive,
+        client,
+        drive_config(tmp_path),
+        md_config(),
+        apply=True,
+    )
+
+    assert deleted == []
+    assert drive.resource.items["file"]["name"] == "file +delete"
+    assert drive.resource.update_calls == []
+    assert status_by_file(client)["file"] == "no_access"
 
 
 def test_rejection_wins_for_conflicting_duplicate_decisions(tmp_path):
@@ -797,6 +874,7 @@ def test_rejection_wins_for_conflicting_duplicate_decisions(tmp_path):
 
     assert deleted == []
     assert drive.resource.items["file"]["trashed"] is False
+    assert drive.resource.items["file"]["name"] == "file"
     assert status_by_file(client)["file"] == "rejected"
     assert approval_by_file(client)["file"] == ""
 
@@ -1044,3 +1122,42 @@ def test_ensure_tabs_migrates_previous_queue_schema_and_preserves_approval():
         {"userEnteredValue": "no"},
     ]
     assert validation["strict"] is False
+
+
+def test_ensure_tabs_reorders_previous_moderator_schema_without_data_loss():
+    row = {header: f"value-{header}" for header in PENDING_HEADERS_V2}
+    row.update(
+        {
+            "approve": "no",
+            "status": "pending",
+            "previous_name": "before",
+            "current_name": "after +delete",
+            "file_id": "file",
+        }
+    )
+    service, client = sheets_client(
+        {
+            "pending": [
+                PENDING_HEADERS_V2,
+                [row[header] for header in PENDING_HEADERS_V2],
+            ],
+            "deleted": [DELETED_HEADERS],
+        }
+    )
+
+    client.ensure_tabs()
+
+    migrated = client.read_pending()[0]
+    assert service.tabs["pending"][0] == PENDING_HEADERS
+    assert PENDING_HEADERS[:9] == [
+        "approve",
+        "status",
+        "previous_name",
+        "item_type",
+        "link",
+        "renamer_name",
+        "renamer_email",
+        "renamed_at",
+        "current_name",
+    ]
+    assert migrated == row

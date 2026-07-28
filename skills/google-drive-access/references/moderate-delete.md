@@ -61,7 +61,7 @@ Rows are keyed by `file_id`:
 
 The `pending` columns are:
 
-`approve, status, previous_name, current_name, item_type, link, renamer_name, renamer_email, renamed_at, path, created_at, modified_at, size_bytes, file_id, scan_root_id, renamer_domain, renamer_person_id`
+`approve, status, previous_name, item_type, link, renamer_name, renamer_email, renamed_at, current_name, path, created_at, modified_at, size_bytes, file_id, scan_root_id, renamer_domain, renamer_person_id`
 
 The moderator-facing fields come first. The header and first two columns are
 frozen, filtering and approval dropdowns are enabled, status rows are
@@ -127,8 +127,17 @@ surrounding whitespace is ignored.
 
 Only approved rows with `status=pending` are considered for trashing. During
 `apply --apply`, a negative decision sets `status=rejected`, clears `approve`,
-and leaves Drive untouched. Preview mode reports it without changing the Sheet.
-If duplicate rows for one `file_id` conflict, rejection wins.
+removes complete marker tokens from the live Drive name, updates
+`current_name`, and never trashes the item. If marker removal leaves an empty
+name, the latest non-empty previous name from the verified rename event is
+restored, with the queue's `previous_name` as a fallback. If no safe name is
+available, Drive remains unchanged and the status becomes
+`reject_name_unresolved`.
+
+Rejection rename still requires the item to be live, marked, inside the
+configured scan roots, and `capabilities.canRename=true`. Preview mode reports
+the planned rename without changing Drive or the Sheet. If duplicate rows for
+one `file_id` conflict, rejection wins.
 
 ## Commands
 

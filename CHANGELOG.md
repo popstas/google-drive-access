@@ -15,7 +15,8 @@ Google Sheet for review.
 A moderator reviews the queue and selects the primary `yes` or `no` choice in
 the `approve` column. Compact and localized values can also be typed:
 `1`/`да` approve and `0`/`нет` reject. A rejection closes the queue row with
-`status=rejected` and cannot trash the item.
+`status=rejected`, removes `+delete` from the live Drive name, and cannot trash
+the item. If the marker was the whole name, the last non-empty name is restored.
 
 The application previews the operation by default. Only an explicit
 `apply --apply` command moves approved items to Google Drive trash. Nothing is
@@ -144,10 +145,19 @@ The parser also accepts hidden typed aliases: `1`/`да` for approval and
 `0`/`нет` for rejection. Technical IDs are preserved but hidden by default.
 
 An explicit negative decision is processed only by a real `apply --apply`:
-the row becomes `rejected`, its approval cell is cleared, and Drive is not
-modified. A preview reports the decision without changing either the Sheet or
-Drive. If duplicate rows for the same `file_id` contain conflicting decisions,
-rejection wins.
+the marker is removed from the current Drive name, the row becomes `rejected`,
+its approval cell is cleared, and the item is not trashed. If removing all
+complete marker tokens produces an empty string, the command restores the
+latest non-empty previous name from Drive Activity, falling back to the queue's
+`previous_name`. If no safe non-empty name can be recovered, the command leaves
+Drive unchanged and records `reject_name_unresolved`. A preview reports the
+planned rename without changing either the Sheet or Drive. If duplicate rows
+for the same `file_id` contain conflicting decisions, rejection wins.
+
+Before a rejection rename, apply revalidates the live marker, configured
+folder scope, trash state, and `capabilities.canRename`. The Sheet cannot use a
+tampered `file_id` to rename an unrelated item. After a successful rename,
+`current_name` is updated immediately in the queue.
 
 ### Authentication changes
 
@@ -189,15 +199,17 @@ domain allow-list without Activity mode.
 
 The `pending` tab contains:
 
-`approve, status, previous_name, current_name, item_type, link, renamer_name, renamer_email, renamed_at, path, created_at, modified_at, size_bytes, file_id, scan_root_id, renamer_domain, renamer_person_id`
+`approve, status, previous_name, item_type, link, renamer_name, renamer_email, renamed_at, current_name, path, created_at, modified_at, size_bytes, file_id, scan_root_id, renamer_domain, renamer_person_id`
 
 The `deleted` tab contains:
 
 `deleted_at, approved_value, previous_name, current_name, item_type, link, renamer_name, renamer_email, renamed_at, path, created_at, modified_at, file_id`
 
-The immediately previous filename-queue schema is migrated automatically while
-preserving rows, statuses, and approval values. Unknown or custom schemas are
-still rejected rather than overwritten.
+Both previous filename-queue schemas are migrated automatically while
+preserving rows, statuses, approval values, and actor fields. The new
+moderator order places type, link, actor identity, and rename time immediately
+after `previous_name`. Unknown or custom schemas are still rejected rather than
+overwritten.
 
 After a successful trash operation, the audit is written to both the Sheet and
 the configured CSV. Audit-write errors are surfaced even when Drive already
@@ -237,7 +249,7 @@ accepted the trash operation.
 
 ### Validation
 
-- 166 repository tests pass.
+- 169 repository tests pass.
 - Black and isort checks pass for all Python source and tests.
 - Python bytecode compilation and dependency checks pass.
 - A wheel builds successfully.

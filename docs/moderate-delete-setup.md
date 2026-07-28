@@ -285,7 +285,14 @@ The command must not trash the item. Review the logs and candidate count.
 
 To refuse a request, select `no` (typed aliases `0` and `нет` are also
 accepted). The preview does not mutate the row. On `apply --apply`, the row
-becomes `rejected`, the approval cell is cleared, and the item is not trashed.
+becomes `rejected`, the approval cell is cleared, complete `+delete` tokens are
+removed from the Drive name, and the item is not trashed. If the remaining name
+would be empty, the latest non-empty `previous_name` is restored. Confirm the
+queue's `current_name` and the live Drive name show the restored value.
+
+If no safe previous name can be resolved, the item remains unchanged with
+`reject_name_unresolved`. Do not work around this by entering an arbitrary name
+in the Sheet; restore a valid Drive name manually and scan again.
 
 ## 10. Run a controlled live test
 

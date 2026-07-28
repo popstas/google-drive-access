@@ -340,7 +340,10 @@ unknown custom schemas still fail closed.
 
 The visible approval choices are `yes` and `no`. Typed aliases `1`/`да` mean
 `yes`, while `0`/`нет` mean `no`. A real apply changes an explicit refusal to
-`status=rejected`, clears the decision cell, and never trashes that item.
+`status=rejected`, clears the decision cell, removes complete `+delete` tokens
+from the live Drive name, and never trashes that item. If removal would leave
+an empty name, the latest non-empty previous name is restored from the verified
+rename event, with the queue's `previous_name` as a fallback.
 
 `apply` treats the Sheet as untrusted input. Immediately before trashing it
 re-fetches metadata and verifies the marker, configured Drive/folder ancestry,

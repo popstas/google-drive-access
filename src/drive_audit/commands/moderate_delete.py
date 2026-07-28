@@ -26,7 +26,7 @@ REJECT_VALUES = {"no", "0", "нет"}
 
 ITEM_FIELDS = (
     "id,name,mimeType,parents,driveId,createdTime,modifiedTime,trashed,size,"
-    "capabilities(canTrash),"
+    "capabilities(canTrash,canRename),"
     "lastModifyingUser(displayName,emailAddress,permissionId)"
 )
 
@@ -51,6 +51,52 @@ def _has_marker(name: str, marker: str) -> bool:
         if marker_end == len(folded_name) or not folded_name[marker_end].isalnum():
             return True
         start = marker_index + 1
+
+
+def _remove_marker(name: str, marker: str) -> str:
+    """Remove complete marker tokens and adjacent leading whitespace."""
+    if not marker:
+        return name
+
+    folded_name = (name or "").casefold()
+    folded_marker = marker.casefold()
+    parts: List[str] = []
+    cursor = 0
+    search_start = 0
+    while True:
+        marker_index = folded_name.find(folded_marker, search_start)
+        if marker_index < 0:
+            break
+        marker_end = marker_index + len(folded_marker)
+        if marker_end < len(folded_name) and folded_name[marker_end].isalnum():
+            search_start = marker_index + 1
+            continue
+
+        remove_start = marker_index
+        while remove_start > cursor and name[remove_start - 1].isspace():
+            remove_start -= 1
+        parts.append(name[cursor:remove_start])
+        cursor = marker_end
+        search_start = marker_end
+
+    if cursor == 0:
+        return name
+    parts.append(name[cursor:])
+    return "".join(parts).strip()
+
+
+def _rename_item(service, file_id: str, name: str) -> Dict[str, Any]:
+    """Rename a Drive item without moving or trashing it."""
+    return (
+        service.files()
+        .update(
+            fileId=file_id,
+            body={"name": name},
+            supportsAllDrives=True,
+            fields="id,name",
+        )
+        .execute()
+    )
 
 
 def _item_type(metadata: Dict[str, Any]) -> str:
@@ -474,15 +520,10 @@ def apply(
             decisions[file_id] = (decision, row)
 
     approved: List[Dict[str, Any]] = []
-    rejected_count = 0
+    rejected: List[Dict[str, Any]] = []
     for file_id, (decision, row) in decisions.items():
         if decision in REJECT_VALUES:
-            rejected_count += 1
-            if apply:
-                logger.info("Rejected queue item {}", file_id)
-            else:
-                logger.info("[dry-run] would reject queue item {}", file_id)
-            _set_status(sheets_client, file_id, "rejected", apply)
+            rejected.append(row)
             continue
         approved.append(row)
 
@@ -491,6 +532,116 @@ def apply(
     parent_cache: Dict[str, Dict[str, Any]] = {}
     deleted_rows: List[Dict[str, Any]] = []
     eligible_count = 0
+    rejected_count = 0
+
+    for row in rejected:
+        file_id = row.get("file_id", "")
+        try:
+            metadata = get_file_metadata(service, file_id)
+        except Exception as error:
+            logger.warning(
+                "Failed to read metadata for rejected item {}: {}",
+                file_id,
+                error,
+            )
+            _set_status(sheets_client, file_id, "error", apply)
+            continue
+
+        current_name = str(metadata.get("name") or "")
+        if metadata.get("trashed"):
+            _set_status(sheets_client, file_id, "already_trashed", apply)
+            continue
+        if not _has_marker(current_name, md_config.name_marker):
+            _set_status(sheets_client, file_id, "marker_removed", apply)
+            continue
+        if not _is_item_in_scope(service, metadata, drive_config, roots, parent_cache):
+            logger.warning(
+                "Refusing to rename out-of-scope rejected item {} ({})",
+                current_name,
+                file_id,
+            )
+            _set_status(sheets_client, file_id, "out_of_scope", apply)
+            continue
+        if not (metadata.get("capabilities") or {}).get("canRename", False):
+            logger.warning(
+                "No permission to rename rejected item {} ({})",
+                current_name,
+                file_id,
+            )
+            _set_status(sheets_client, file_id, "no_access", apply)
+            continue
+
+        restored_name = _remove_marker(current_name, md_config.name_marker)
+        if not restored_name:
+            previous_name = ""
+            if rename_resolver is not None:
+                rename_event = rename_resolver.resolve_rename(
+                    file_id,
+                    current_name,
+                    md_config.name_marker,
+                    metadata,
+                )
+                previous_name = rename_event.previous_name if rename_event else ""
+            if not previous_name:
+                previous_name = row.get("previous_name", "")
+            restored_name = _remove_marker(
+                previous_name.strip(),
+                md_config.name_marker,
+            )
+
+        if not restored_name:
+            logger.warning(
+                "Cannot restore a non-empty name for rejected item {}",
+                file_id,
+            )
+            _set_status(sheets_client, file_id, "reject_name_unresolved", apply)
+            continue
+
+        rejected_count += 1
+        if not apply:
+            logger.info(
+                "[dry-run] would reject and rename {} ({}) -> {}",
+                current_name,
+                file_id,
+                restored_name,
+            )
+            continue
+
+        try:
+            _rename_item(service, file_id, restored_name)
+        except Exception as error:
+            logger.error(
+                "Failed to remove marker from rejected item {} ({}): {}",
+                current_name,
+                file_id,
+                error,
+            )
+            _set_status(sheets_client, file_id, "error", True)
+            continue
+
+        try:
+            sheets_client.update_status(
+                file_id,
+                "rejected",
+                clear_approve=True,
+                current_name=restored_name,
+            )
+        except Exception as error:
+            logger.error(
+                "Removed marker from {} ({}) but failed to update queue: {}",
+                current_name,
+                file_id,
+                error,
+            )
+            raise RuntimeError(
+                "Marker was removed but the rejection status update failed"
+            ) from error
+        logger.info(
+            "Rejected and renamed {} ({}) -> {}",
+            current_name,
+            file_id,
+            restored_name,
+        )
 
     metadata_by_id: Dict[str, Dict[str, Any]] = {}
     for row in approved:
