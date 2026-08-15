@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import re
 import sys
 import time
 from pathlib import Path
@@ -58,6 +59,32 @@ LOG_COLUMNS = [
 ]
 
 
+EMAIL_RE = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}")
+
+
+def row_emails(row: Dict[str, str], gmail_only: bool) -> List[str]:
+    """
+    Addresses to grant for one folder.
+
+    The Planfix field is free text: it holds one address, several separated by
+    commas, or an address with junk glued to it. Pull out every address-looking
+    token instead of trusting the raw string.
+
+    In gmail-only mode the non-gmail addresses are dropped rather than granted:
+    a named Drive permission needs a Google account, and a failed grant would
+    keep the public link in place for the whole folder.
+    """
+    found = EMAIL_RE.findall(row.get("contact_email") or "")
+    emails = []
+    for email in found:
+        email = email.lower()
+        if gmail_only and not email.endswith("@gmail.com"):
+            continue
+        if email not in emails:
+            emails.append(email)
+    return emails
+
+
 def load_rows(csv_file: Path, gmail_only: bool) -> List[Dict[str, str]]:
     if not csv_file.exists():
         raise FileNotFoundError(f"CSV file not found: {csv_file}")
@@ -70,12 +97,9 @@ def load_rows(csv_file: Path, gmail_only: bool) -> List[Dict[str, str]]:
 
     selected = []
     for row in rows:
-        email = (row.get("contact_email") or "").strip().lower()
-        if not email:
-            continue
-        if gmail_only and not email.endswith("@gmail.com"):
-            continue
         if not (row.get("folder_id") or "").strip():
+            continue
+        if not row_emails(row, gmail_only):
             continue
         selected.append(row)
 
@@ -124,7 +148,7 @@ def close_public_client_folders(
                 "folder_id": row.get("folder_id", ""),
                 "client_name": row.get("drive_client_name", ""),
                 "contact_id": row.get("contact_id", ""),
-                "email": (row.get("contact_email") or "").strip().lower(),
+                "email": " ".join(row_emails(row, gmail_only)),
                 "grant": fields.get("grant", ""),
                 "revoke": fields.get("revoke", ""),
                 "status": fields["status"],
@@ -136,48 +160,56 @@ def close_public_client_folders(
     try:
         for index, row in enumerate(rows, start=1):
             folder_id = row["folder_id"].strip()
-            email = (row.get("contact_email") or "").strip().lower()
-            label = f"[{index}/{len(rows)}] {folder_id} {email}"
+            emails = row_emails(row, gmail_only)
+            label = f"[{index}/{len(rows)}] {folder_id} {' '.join(emails)}"
 
             permissions = get_file_permissions(service, folder_id)
             anyone = [p for p in permissions if p.get("type") == "anyone"]
-            already_named = any(
-                p.get("type") == "user"
-                and (p.get("emailAddress") or "").lower() == email
+            named = {
+                (p.get("emailAddress") or "").lower()
                 for p in permissions
-            )
+                if p.get("type") == "user"
+            }
+            missing = [email for email in emails if email not in named]
 
             if not anyone:
                 logger.info("{} - already closed, skipping", label)
                 record(row, grant="skip", revoke="skip", status="already_closed")
                 continue
 
-            # 1. Named access first.
-            if already_named:
+            # 1. Named access first, for every address on the card. The link is
+            #    dropped only when all of them landed - one client per folder is
+            #    the common case, but a shared card may list two people.
+            if not missing:
                 grant = "existing"
             elif not apply:
                 grant = "would_grant"
             else:
-                try:
-                    add_user_permission(service, folder_id, email, role)
-                    grant = "granted"
-                except Exception as error:  # pylint: disable=broad-except
-                    logger.error("{} - grant failed: {}", label, error)
+                failed_grant = ""
+                for email in missing:
+                    try:
+                        add_user_permission(service, folder_id, email, role)
+                    except Exception as error:  # pylint: disable=broad-except
+                        failed_grant = f"{email}: {error}"
+                        logger.error("{} - grant failed: {}", label, error)
+                        break
+                if failed_grant:
                     record(
                         row,
                         grant="error",
                         revoke="skip",
                         status="grant_failed",
-                        details=str(error),
+                        details=failed_grant,
                     )
                     continue
+                grant = f"granted:{len(missing)}"
 
             # 2. Only now drop the public link.
             if not apply:
                 logger.info(
                     "{} - named access {}, would remove {} anyone permission(s)",
                     label,
-                    "already there" if already_named else "to grant",
+                    "already there" if not missing else f"to grant ({len(missing)})",
                     len(anyone),
                 )
                 record(row, grant=grant, revoke="would_revoke", status="preview")
