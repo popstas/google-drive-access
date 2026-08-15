@@ -22,7 +22,7 @@ HTTP endpoints are out of scope for this skill — see `README.md` and `data/use
 
 ## Quick Reference
 
-All 16 single-command scenarios plus 1 composite workflow. CLI commands run as `python -m drive_audit.commands --config data/config.yml <command>` unless noted. Standalone scripts run as `python <script>.py` from the repo root.
+All 17 single-command scenarios plus 1 composite workflow. CLI commands run as `python -m drive_audit.commands --config data/config.yml <command>` unless noted. Standalone scripts run as `python <script>.py` from the repo root.
 
 Note: `--config` and `--debug` are top-level flags of `python -m drive_audit.commands` — they must appear **before** the subcommand name (e.g. `python -m drive_audit.commands --config data/config.yml --debug merge_client_folders ...`). Subcommand-specific flags (`--csv-file`, `--dry-run`, `--emails`, etc.) appear after the subcommand.
 
@@ -44,7 +44,8 @@ Note: `--config` and `--debug` are top-level flags of `python -m drive_audit.com
 | 14 | Find similar file pairs between two scans | `python find_similar_files.py` | [find-similar-files.md](references/find-similar-files.md) | `compare_only_old.csv`, `compare_only_new.csv` |
 | 15 | Sanity-check a compare run (counts, diffs) | `python check_compare_results.py` | [check-compare-results.md](references/check-compare-results.md) | `compare_only_*.csv`, `.compare_results.json` |
 | 16 | Revert a `merge_client_folders` run | `python revert_merge_client_folders.py` | [revert-merge-client-folders.md](references/revert-merge-client-folders.md) | `data/merge_client_folders.csv` |
-| 17 | Revoke all direct access of a single user (offboarding) — composite | `filter_permissions` + `remove_access` | [remove-user-access.md](references/remove-user-access.md) | email(s) to revoke, fresh `data/permissions.csv` |
+| 17 | Replace a client folder's public link with named client access | `python close_public_client_folders.py` | [close-public-client-folders.md](references/close-public-client-folders.md) | mapping CSV `folder_id` + `contact_email`; `--apply` to write |
+| 18 | Revoke all direct access of a single user (offboarding) — composite | `filter_permissions` + `remove_access` | [remove-user-access.md](references/remove-user-access.md) | email(s) to revoke, fresh `data/permissions.csv` |
 
 ## Setup
 
