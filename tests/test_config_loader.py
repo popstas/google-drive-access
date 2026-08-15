@@ -3,6 +3,7 @@ import pytest
 from drive_audit.config_loader import (
     build_http_config,
     build_planfix_config,
+    build_share_file_config,
     load_config,
 )
 
@@ -51,6 +52,26 @@ def test_build_http_config_defaults_to_english_for_unknown_lang(sample_config_da
     http_config = build_http_config(sample_config_data)
 
     assert http_config.lang == "en"
+
+
+def test_share_file_config_keeps_client_folder_private_by_default(sample_config_data):
+    share_file_config = build_share_file_config(sample_config_data)
+
+    assert share_file_config.public_client_folder is False
+    assert share_file_config.role == "commenter"
+    assert share_file_config.days == 90
+
+
+def test_share_file_config_reads_public_client_folder(sample_config_data):
+    sample_config_data["share_file"] = {
+        "days": 0,
+        "role": "commenter",
+        "public_client_folder": True,
+    }
+
+    share_file_config = build_share_file_config(sample_config_data)
+
+    assert share_file_config.public_client_folder is True
 
 
 def test_missing_planfix_section_raises_value_error(sample_config_data):

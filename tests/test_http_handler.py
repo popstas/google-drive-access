@@ -887,7 +887,7 @@ def test_set_client_folder_access_public_permission(
         fake_create_anyone,
     )
 
-    share_cfg = ShareFileConfig(role="reader", days=7)
+    share_cfg = ShareFileConfig(role="reader", days=7, public_client_folder=True)
     set_client_folder_access_route.handle(
         handler,
         {
@@ -944,7 +944,7 @@ def test_set_client_folder_access_public_permission_no_expiry(
         fake_create_anyone,
     )
 
-    share_cfg = ShareFileConfig(role="reader", days=0)
+    share_cfg = ShareFileConfig(role="reader", days=0, public_client_folder=True)
     set_client_folder_access_route.handle(
         handler,
         {
@@ -962,6 +962,57 @@ def test_set_client_folder_access_public_permission_no_expiry(
     _, file_id, role, expiration_time = anyone_calls[0]
     assert file_id == "FOLDER456"
     assert expiration_time is None
+
+
+def test_set_client_folder_access_no_public_permission_when_flag_off(
+    monkeypatch, drive_config, http_config
+):
+    """Default config (public_client_folder=False) never opens the client folder."""
+    planfix_client = SimpleNamespace()
+    service = object()
+    handler = build_handler(planfix_client, service, http_config, drive_config)
+    handler.translate = lambda key, **context: f"translated:{key}:{context}"
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.extract_folder_id",
+        lambda url: "FOLDER321",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.get_task_and_assignees",
+        lambda client, cid: (0, []),
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.grant_access",
+        lambda *args, **kwargs: {
+            "granted_accounts": ["u@example.com"],
+            "existing_accounts": [],
+        },
+    )
+
+    anyone_calls = []
+
+    monkeypatch.setattr(
+        "drive_audit.http.set_client_folder_access.create_anyone_permission",
+        lambda *args: anyone_calls.append(args),
+    )
+
+    set_client_folder_access_route.handle(
+        handler,
+        {
+            "contact_id": 1,
+            "folder_url": "https://drive.google.com/drive/folders/FOLDER321",
+        },
+        planfix_client=planfix_client,
+        service=service,
+        drive_config=drive_config,
+        role="reader",
+        share_file_config=ShareFileConfig(role="commenter", days=0),
+    )
+
+    assert anyone_calls == []
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "granted_existing" in payload["answer"]
 
 
 def test_set_client_folder_access_no_public_permission_without_config(

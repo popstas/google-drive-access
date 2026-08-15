@@ -44,6 +44,7 @@ def build_share_file_config(config_data: Dict[str, Any]) -> ShareFileConfig:
     return ShareFileConfig(
         days=int(section.get("days", 90)),
         role=str(section.get("role", "commenter")),
+        public_client_folder=bool(section.get("public_client_folder", False)),
     )
 
 

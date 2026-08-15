@@ -7,6 +7,11 @@ from typing import Any, Dict, List, Optional
 class ShareFileConfig:
     days: int
     role: str
+    # Whether /set_client_folder_access opens the client folder to anyone with
+    # the link. Off by default: an `anyone` permission cannot expire (Drive
+    # supports expirationTime on user/group permissions only), so every
+    # serviced folder would stay publicly reachable forever.
+    public_client_folder: bool = False
 
 
 @dataclass

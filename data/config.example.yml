@@ -66,6 +66,12 @@ planfix:
 share_file:
   days: 90   # 0 - never expire
   role: commenter
+  # Открывать папку клиента по ссылке (anyone) при /set_client_folder_access.
+  # По умолчанию выключено: у права anyone нет срока действия (Google Drive
+  # поддерживает expirationTime только для user/group), поэтому такая ссылка
+  # остаётся навсегда. Для разовой публичной ссылки есть /share_folder
+  # с явным public_access.
+  public_client_folder: false
 
 http:
   port: 7587

@@ -81,7 +81,7 @@ def handle(
             email=emails,
         )
 
-        if share_file_config:
+        if share_file_config and share_file_config.public_client_folder:
             expiration_time = None
             if share_file_config.days > 0:
                 expiration_time = (
