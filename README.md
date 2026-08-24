@@ -283,6 +283,12 @@ The HTTP server (see `src/drive_audit/server.py`) exposes authenticated endpoint
   - Behavior: requires `drive.writer_subdir` to be set in config. Finds the subfolder by that name inside the folder identified by `folder_url`, verifies it is a direct child folder of the client folder, then grants the configured role to the resolved accounts. When `public_access` is provided, also grants "anyone with the link" permission to the subfolder with the specified role. The `public_subdir` is not created inside this subfolder.
   - Error responses: `writer_subdir_not_configured`, `unable_extract_folder_id`, `subfolder_not_found`, `subfolder_not_a_folder`, `subfolder_not_child`.
 
+- `POST /share_file` — Opens one document to "anyone with the link".
+  - Body fields: `document_url`.
+  - Behavior: resolves the file id from the url, checks the file lives in the configured shared drive, and grants an `anyone` permission with the role and expiry from the `share_file` config section. A file that already has an `anyone` permission is left as is.
+  - Documents only: a link pointing at a folder is refused with `share_file_is_folder`. An `anyone` permission on a folder exposes everything inside it, now and later, and it cannot be time-boxed — that is the leak found in client folders on 15.08.2026.
+  - Error responses: `unable_extract_file_id`, `share_file_not_found`, `share_file_outside_drive`, `share_file_is_folder`.
+
 All `/set_client_folder_access` and `/share_folder` endpoints accept an optional `lang` field (`"en"` or `"ru"`) to override the server's default response language for that request.
 
 ## Output

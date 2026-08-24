@@ -291,6 +291,51 @@ def test_share_file_outside_drive(
     assert "share_file_outside_drive" in payload["answer"]
 
 
+def test_share_file_rejects_folder(
+    monkeypatch, drive_config, http_config, share_file_config
+):
+    """A folder link must be refused: opening a folder to anyone leaks its whole tree."""
+    handler, service = _make_stub_handler(http_config, drive_config)
+    permission_calls = []
+    created = []
+
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.extract_file_id",
+        lambda url: "folder123",
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.get_file_metadata",
+        lambda svc, fid: {
+            "id": "folder123",
+            "name": "Готовый перевод 21.08",
+            "driveId": "drive",
+            "mimeType": "application/vnd.google-apps.folder",
+        },
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.get_file_permissions",
+        lambda svc, fid: permission_calls.append(fid) or [],
+    )
+    monkeypatch.setattr(
+        "drive_audit.http.share_file.create_anyone_permission",
+        lambda svc, fid, role, expiration: created.append((fid, role)),
+    )
+
+    share_file_route.handle(
+        handler,
+        {"document_url": "https://drive.google.com/drive/folders/folder123"},
+        service=service,
+        drive_config=drive_config,
+        share_file_config=share_file_config,
+    )
+
+    status, payload = handler.responses[0]
+    assert status == 200
+    assert "share_file_is_folder" in payload["answer"]
+    assert permission_calls == []
+    assert created == []
+
+
 def test_share_file_success_with_days(
     monkeypatch, drive_config, http_config, share_file_config
 ):

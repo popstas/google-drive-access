@@ -1,4 +1,8 @@
-"""Route handler for sharing a file via 'anyone with the link'."""
+"""Route handler for sharing a file via 'anyone with the link'.
+
+Only documents are shared: a folder link is refused, because an `anyone`
+permission on a folder opens its whole tree and never expires.
+"""
 
 from datetime import datetime, timedelta, timezone
 
@@ -12,6 +16,8 @@ from ..google_client import (
     get_file_permissions,
 )
 from ..http_utils import LocalizedError
+
+FOLDER_MIME = "application/vnd.google-apps.folder"
 
 
 def handle(handler, payload, *, service, drive_config, share_file_config):
@@ -45,6 +51,15 @@ def handle(handler, payload, *, service, drive_config, share_file_config):
         if metadata.get("driveId") != drive_config.drive_id:
             handler.send_json(
                 200, {"answer": handler.translate("share_file_outside_drive")}
+            )
+            return
+
+        # A folder shared with `anyone` exposes everything inside it, now and
+        # later, and the permission cannot expire. That is the leak found on
+        # 15.08.2026 in client folders, so refuse folder links outright.
+        if metadata.get("mimeType") == FOLDER_MIME:
+            handler.send_json(
+                200, {"answer": handler.translate("share_file_is_folder")}
             )
             return
 

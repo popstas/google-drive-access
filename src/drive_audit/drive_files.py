@@ -52,7 +52,11 @@ class DriveFiles:
     def get_file_metadata(self, file_id: str) -> Dict[str, Any]:
         return (
             self._service.files()
-            .get(fileId=file_id, supportsAllDrives=True, fields="id, name, driveId")
+            .get(
+                fileId=file_id,
+                supportsAllDrives=True,
+                fields="id, name, mimeType, driveId",
+            )
             .execute()
         )
 

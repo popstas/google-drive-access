@@ -239,3 +239,26 @@ def test_ensure_public_subdir_delegates_to_permissions(tmp_path):
 
     assert folder["name"] == "public"
     assert permissions.ensure_calls == [folder["id"]]
+
+
+class _FakeFilesGet:
+    def __init__(self, response):
+        self.response = response
+        self.get_calls = []
+
+    def get(self, **kwargs):
+        self.get_calls.append(kwargs)
+        return _FakeRequest(self.response)
+
+
+def test_get_file_metadata_asks_for_mime_type():
+    """share_file needs mimeType to tell a document from a folder."""
+    files_api = _FakeFilesGet({"id": "file1", "name": "Doc", "mimeType": "text/plain"})
+    files = DriveFiles(_FakeService(files_api), ListFolderChildrenCache())
+
+    metadata = files.get_file_metadata("file1")
+
+    assert metadata["mimeType"] == "text/plain"
+    assert files_api.get_calls[0]["fileId"] == "file1"
+    assert "mimeType" in files_api.get_calls[0]["fields"]
+    assert files_api.get_calls[0]["supportsAllDrives"] is True
