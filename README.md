@@ -55,6 +55,7 @@ lang: "en"
 logLevel: "INFO"
 
 google:
+  # Service-account or authorized-user OAuth JSON.
   credentials_file: "data/service-account.json"
 
 drive:
@@ -255,6 +256,108 @@ python -m drive_audit.commands filter_permissions \
   --csv-file data/permissions.csv \
   --csv-save data/filtered.csv
 ```
+
+### moderate_delete
+
+Moderated, reversible deletion driven only by a marker in the current file or
+folder name. By default the case-insensitive marker token is `+delete`. It may
+be appended directly (`report+delete`) or placed before an extension
+(`report +delete.docx`), but it does not match a longer alphanumeric word such
+as `+deleted`.
+Comments are not read. Approved items are moved to the **trash** (reversible),
+never hard-deleted, and every deletion is recorded in the Sheet and a CSV report.
+
+Configure the command under `commands.moderate_delete` in `data/config.yml` (see `data/config.example.yml`):
+
+```yaml
+commands:
+  moderate_delete:
+    sheet_id: "<GOOGLE_SHEET_ID>"
+    name_marker: "+delete"
+    scan_roots: ["<FOLDER_ID>"]                # empty uses drive.root_folder_id
+    scan_interval_seconds: 300                 # used by the watch action
+    max_per_run: 200
+    report_csv: "deletions-report.csv"
+    allow_folder_delete: false                 # explicit opt-in for recursive folder trash
+    use_activity_api: true                     # capture rename actor/time
+    allowed_renamer_domains:                   # exact email domains; empty/missing allows all
+      - "example.com"
+```
+
+The configured identity needs **Editor** access on the Sheet (it creates the
+`pending`/`deleted` tabs on first run) and the **Content manager** role on a
+Shared Drive to trash files. `credentials_file` accepts either service-account
+JSON or an authorized-user OAuth JSON containing the required granted scopes.
+
+`scan_roots` limits traversal to descendants of explicit folder IDs. The scanner
+does not enumerate unrelated Drive content and does not use the general folder
+cache, so removing `+delete` is observed on the next successful scan. The row is
+marked `marker_removed` and its approval is cleared. Re-adding the marker queues
+the item again with a blank approval.
+
+The scan after an apply removes completed `trashed`, `rejected`,
+`already_trashed`, and `duplicate` rows from `pending`. Deletion audit rows
+remain in `deleted`. If a completed item is marked again, it is queued as a new
+`pending` row with a blank decision.
+
+With `use_activity_api: true`, Drive Activity `activity.query` finds the latest
+rename whose `newTitle` equals the current marked name; People API resolves the
+actor. When People returns an empty external profile, the resolver can use
+Drive's `lastModifyingUser` only if its modification timestamp matches the
+rename event within five seconds. The Sheet records separate moderator-facing
+name and email columns; the raw People resource is kept in a hidden technical
+column. If `allowed_renamer_domains` is missing or empty, marked names from all
+resolved or unresolved actors are accepted. A non-empty list allows only exact,
+case-insensitive email-domain matches and enables fail-closed filtering during
+both scan and apply. For example, `example.com` accepts `user@example.com` but
+not `user@sub.example.com`. This requires Drive Activity API, People API, and
+one of:
+
+- service-account scopes `drive.activity.readonly` + `directory.readonly` with
+  domain-wide delegation through `delegated_user`;
+- authorized-user scopes `drive.activity.readonly`, `userinfo.email`, and
+  `userinfo.profile` in `credentials_file` (without `delegated_user`).
+
+Workflow:
+
+```bash
+# Synchronize once
+python -m drive_audit.commands --config data/config.yml moderate_delete scan
+
+# Or keep scanning at scan_interval_seconds until Ctrl+C
+python -m drive_audit.commands --config data/config.yml moderate_delete watch
+
+# A reviewer selects approve=yes (or types 1/да), then previews apply
+python -m drive_audit.commands --config data/config.yml moderate_delete apply
+
+# Trash approved, still-current and in-scope items
+python -m drive_audit.commands --config data/config.yml moderate_delete apply --apply
+
+python -m drive_audit.commands --config data/config.yml moderate_delete report
+```
+
+The queue is formatted for moderation: `approve`, `status`, old/current names,
+type, link, actor, and rename time appear first. The first two columns and the
+header row are frozen, filters and approval dropdowns are enabled, pending/error
+states are highlighted, and technical IDs are hidden at the right. A recognized
+previous queue schema is migrated automatically without losing approvals;
+unknown custom schemas still fail closed.
+
+The visible approval choices are `yes` and `no`. Typed aliases `1`/`да` mean
+`yes`, while `0`/`нет` mean `no`. A real apply changes an explicit refusal to
+`status=rejected`, clears the decision cell, removes complete `+delete` tokens
+from the live Drive name, and never trashes that item. If removal would leave
+an empty name, the latest non-empty previous name is restored from the verified
+rename event, with the queue's `previous_name` as a fallback.
+
+`apply` treats the Sheet as untrusted input. Immediately before trashing it
+re-fetches metadata and verifies the marker, configured Drive/folder ancestry,
+current trash state, `canTrash`, folder policy, and strict renamer domain. Folder
+deletion is blocked by default; an approved folder and its approved descendant
+are refused as an overlap conflict. Restore mistakes from Drive's trash. See
+`skills/google-drive-access/references/moderate-delete.md` for the command
+reference and `docs/moderate-delete-setup.md` for the credential-safe setup
+guide for a human operator working with an agent.
 
 ## Testing and coverage
 

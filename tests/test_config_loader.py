@@ -2,6 +2,7 @@ import pytest
 
 from drive_audit.config_loader import (
     build_http_config,
+    build_moderate_delete_config,
     build_planfix_config,
     build_share_file_config,
     load_config,
@@ -86,6 +87,60 @@ def test_missing_http_section_raises_value_error(sample_config_data):
 
     with pytest.raises(ValueError):
         build_http_config(sample_config_data)
+
+
+def test_build_moderate_delete_config_defaults():
+    md_config = build_moderate_delete_config({})
+
+    assert md_config.sheet_id == ""
+    assert md_config.name_marker == "+delete"
+    assert md_config.scan_roots == []
+    assert md_config.scan_interval_seconds == 300
+    assert md_config.max_per_run == 200
+    assert md_config.report_csv == "deletions-report.csv"
+    assert md_config.use_activity_api is False
+    assert md_config.allowed_renamer_domains == []
+    assert md_config.allow_folder_delete is False
+
+
+def test_build_moderate_delete_config_defaults_with_empty_section():
+    md_config = build_moderate_delete_config({"commands": {"moderate_delete": {}}})
+
+    assert md_config.sheet_id == ""
+    assert md_config.max_per_run == 200
+
+
+def test_build_moderate_delete_config_overrides():
+    config_data = {
+        "commands": {
+            "moderate_delete": {
+                "sheet_id": "sheet123",
+                "name_marker": "+remove",
+                "scan_roots": ["folder1", "folder2"],
+                "scan_interval_seconds": 60,
+                "max_per_run": 50,
+                "report_csv": "custom-report.csv",
+                "use_activity_api": True,
+                "allowed_renamer_domains": ["trusted.example", "example.com"],
+                "allow_folder_delete": True,
+            }
+        }
+    }
+
+    md_config = build_moderate_delete_config(config_data)
+
+    assert md_config.sheet_id == "sheet123"
+    assert md_config.name_marker == "+remove"
+    assert md_config.scan_roots == ["folder1", "folder2"]
+    assert md_config.scan_interval_seconds == 60
+    assert md_config.max_per_run == 50
+    assert md_config.report_csv == "custom-report.csv"
+    assert md_config.use_activity_api is True
+    assert md_config.allowed_renamer_domains == [
+        "trusted.example",
+        "example.com",
+    ]
+    assert md_config.allow_folder_delete is True
 
 
 def test_load_config_reads_yaml(tmp_path):

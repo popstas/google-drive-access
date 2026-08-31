@@ -18,6 +18,7 @@ from .migrate_contact_folders import (
     migrate_contact_folders,
     run_migrate_contact_folders,
 )
+from .moderate_delete import run_moderate_delete, scan
 from .move_from_csv import move_files_from_csv, run_move_files_from_csv
 from .move_to_public import move_files_to_public_folder, run_move_files_to_public_folder
 from .recheck_files import recheck_files_from_drive, run_recheck_files
@@ -34,6 +35,7 @@ COMMAND_REGISTRY = {
     "drive_links_info": run_drive_links_info,
     "remove_access": run_remove_access,
     "filter_permissions": run_filter_permissions,
+    "moderate_delete": run_moderate_delete,
 }
 
 COMMAND_LOG_FILES = {
@@ -44,6 +46,7 @@ COMMAND_LOG_FILES = {
     "delete_empty_folders": "delete_empty_folders.log",
     "drive_links_info": "drive_links_info.log",
     "remove_access": "remove_access.log",
+    "moderate_delete": "moderate_delete.log",
 }
 
 NO_DRIVE_CONFIG_COMMANDS = {"filter_permissions"}
@@ -204,6 +207,29 @@ def parse_args() -> argparse.Namespace:
         help="Output CSV path for filtered rows",
     )
 
+    moderate_delete_parser = subparsers.add_parser(
+        "moderate_delete",
+        help="Queue items whose names contain +delete and trash approved ones",
+    )
+    moderate_delete_parser.add_argument(
+        "action",
+        choices=["scan", "watch", "apply", "report"],
+        help=(
+            "scan: synchronize once; watch: scan periodically; "
+            "apply: trash approved rows; report: rebuild the CSV"
+        ),
+    )
+    moderate_delete_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="scan/watch: log candidates without writing to the Sheet",
+    )
+    moderate_delete_parser.add_argument(
+        "--apply",
+        action="store_true",
+        help="apply: actually move approved files to trash (default is dry-run)",
+    )
+
     return parser.parse_args()
 
 
@@ -260,6 +286,8 @@ __all__ = [
     "recheck_files_from_drive",
     "remove_access",
     "run_filter_permissions",
+    "run_moderate_delete",
+    "scan",
 ]
 
 
