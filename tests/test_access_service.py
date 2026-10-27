@@ -1,15 +1,18 @@
+from types import SimpleNamespace
+
 import pytest
+from googleapiclient.errors import HttpError
 
 from drive_audit import access_service
 from drive_audit.http_utils import LocalizedError
 from drive_audit.model import DriveConfig
 
 
-def _drive_config(public_subdir=None) -> DriveConfig:
+def _drive_config(public_subdir=None, drive_id="") -> DriveConfig:
     return DriveConfig(
         credentials_file="",
         delegated_user=None,
-        drive_id="",
+        drive_id=drive_id,
         root_folder_id="root",
         root_folder_name="Root",
         include_trashed=False,
@@ -143,6 +146,119 @@ def test_grant_access_with_comma_separated_email_string(monkeypatch):
     assert added_accounts == ["a@example.com", "b@example.com"]
     assert report["granted_accounts"] == ["a@example.com", "b@example.com"]
     assert report["existing_accounts"] == []
+
+
+def _fail_on_change(monkeypatch):
+    """Make any Drive write or Planfix lookup fail the test."""
+
+    def boom(*_args, **_kwargs):
+        raise AssertionError("nothing should be touched for this folder")
+
+    monkeypatch.setattr(access_service, "add_user_permission", boom)
+    monkeypatch.setattr(access_service, "get_file_permissions", boom)
+    monkeypatch.setattr(access_service, "ensure_public_subdir", boom)
+    return type("PF", (), {"get_child_tasks": boom})()
+
+
+def test_grant_access_refuses_folder_outside_shared_drive(monkeypatch):
+    """A folder in someone's My Drive cannot be managed by the service account."""
+    planfix_client = _fail_on_change(monkeypatch)
+    monkeypatch.setattr(
+        access_service,
+        "get_file_metadata",
+        lambda *_: {"id": "folder123", "mimeType": "folder"},
+    )
+
+    with pytest.raises(LocalizedError) as exc_info:
+        access_service.grant_access(
+            planfix_client,
+            drive_service=None,
+            drive_config=_drive_config(public_subdir="public", drive_id="drive1"),
+            role="reader",
+            task_id=1,
+            initial_assignee_ids=["100"],
+            folder_id="folder123",
+        )
+
+    assert exc_info.value.key == "folder_outside_drive"
+
+
+def test_grant_access_refuses_folder_on_another_shared_drive(monkeypatch):
+    planfix_client = _fail_on_change(monkeypatch)
+    monkeypatch.setattr(
+        access_service,
+        "get_file_metadata",
+        lambda *_: {"id": "folder123", "driveId": "other-drive"},
+    )
+
+    with pytest.raises(LocalizedError) as exc_info:
+        access_service.grant_access(
+            planfix_client,
+            drive_service=None,
+            drive_config=_drive_config(drive_id="drive1"),
+            role="reader",
+            task_id=0,
+            initial_assignee_ids=[],
+            folder_id="folder123",
+            email="a@example.com",
+        )
+
+    assert exc_info.value.key == "folder_outside_drive"
+
+
+def test_grant_access_reports_missing_folder(monkeypatch):
+    planfix_client = _fail_on_change(monkeypatch)
+
+    def not_found(*_args):
+        raise HttpError(
+            resp=SimpleNamespace(status=404, reason="Not Found"), content=b""
+        )
+
+    monkeypatch.setattr(access_service, "get_file_metadata", not_found)
+
+    with pytest.raises(LocalizedError) as exc_info:
+        access_service.grant_access(
+            planfix_client,
+            drive_service=None,
+            drive_config=_drive_config(drive_id="drive1"),
+            role="reader",
+            task_id=0,
+            initial_assignee_ids=[],
+            folder_id="folder123",
+            email="a@example.com",
+        )
+
+    assert exc_info.value.key == "folder_not_found"
+
+
+def test_grant_access_accepts_folder_on_configured_drive(monkeypatch):
+    added_accounts = []
+    monkeypatch.setattr(
+        access_service,
+        "get_file_metadata",
+        lambda *_: {"id": "folder123", "driveId": "drive1"},
+    )
+    monkeypatch.setattr(
+        access_service,
+        "add_user_permission",
+        lambda _s, _f, account, _r: added_accounts.append(account) or {"id": "p1"},
+    )
+    monkeypatch.setattr(access_service, "get_file_permissions", lambda *_, **__: [])
+    monkeypatch.setattr(access_service, "ensure_public_subdir", lambda *_, **__: None)
+
+    report = access_service.grant_access(
+        type("PF", (), {})(),
+        drive_service=None,
+        drive_config=_drive_config(drive_id="drive1"),
+        role="reader",
+        task_id=0,
+        initial_assignee_ids=[],
+        folder_id="folder123",
+        email="a@example.com",
+    )
+
+    assert added_accounts == ["a@example.com"]
+    assert report["granted_accounts"] == ["a@example.com"]
 
 
 def test_create_client_folder_handles_existing(monkeypatch):

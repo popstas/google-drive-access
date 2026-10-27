@@ -6,6 +6,7 @@ import re
 from typing import Any, Dict, List, Tuple, Union
 from urllib.parse import parse_qs, urlparse
 
+from googleapiclient.errors import HttpError
 from loguru import logger
 
 from .google_client import (
@@ -13,6 +14,7 @@ from .google_client import (
     create_folder,
     ensure_public_subdir,
     find_child_folder,
+    get_file_metadata,
     get_file_permissions,
 )
 from .http_utils import LocalizedError
@@ -169,6 +171,30 @@ def normalize_emails(email: Union[str, List[Any], None]) -> List[str]:
     return result
 
 
+def ensure_folder_on_drive(
+    drive_service, drive_config: DriveConfig, folder_id: str
+) -> None:
+    """Refuse a folder the service account cannot manage.
+
+    A folder in someone's My Drive (or on another shared drive) is visible
+    to the service account, but every permission change on it fails with
+    403. Check this before touching anything, so the user gets a clear
+    message instead of an internal error.
+    """
+    if not drive_config.drive_id:
+        return
+
+    try:
+        metadata = get_file_metadata(drive_service, folder_id)
+    except HttpError as error:
+        if getattr(getattr(error, "resp", None), "status", None) == 404:
+            raise LocalizedError("folder_not_found") from error
+        raise
+
+    if metadata.get("driveId") != drive_config.drive_id:
+        raise LocalizedError("folder_outside_drive")
+
+
 def grant_access(
     planfix_client: PlanfixClient,
     drive_service,
@@ -179,6 +205,8 @@ def grant_access(
     folder_id: str,
     email: Union[str, List[Any], None] = None,
 ) -> Dict[str, List[str]]:
+    ensure_folder_on_drive(drive_service, drive_config, folder_id)
+
     if drive_config.public_subdir:
         ensure_public_subdir(
             drive_service,

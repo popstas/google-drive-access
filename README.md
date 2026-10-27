@@ -274,6 +274,7 @@ The HTTP server (see `src/drive_audit/server.py`) exposes authenticated endpoint
 - `POST /set_client_folder_access` — Grants access to an existing folder using Planfix task context.
   - Body fields: always requires `contact_id` and `folder_url`. Provide `task_id` and `assignee_id` to override the client task lookup; otherwise the handler uses `planfix.getClientTask` for the contact to determine the task and assignees.
   - Behavior: loads child tasks from Planfix, collects assignee Google accounts (from the provided task or the client task), optionally ensures the configured `public_subdir` exists under the target folder, and grants the configured Planfix role to those accounts.
+  - Folder location: when `drive.drive_id` is set, the folder must live on that shared drive. A folder in someone's My Drive or on another shared drive is refused with `folder_outside_drive` before anything is changed — the service account can see such a folder but cannot manage its access. A folder the service account cannot see returns `folder_not_found`. The same check applies to `/share_folder` and `/create_client_folder`.
   - Link sharing: the folder itself is opened to `anyone` only when `share_file.public_client_folder` is `true` (default `false`). Such a permission never expires — Google Drive supports `expirationTime` on `user` and `group` permissions only — so leaving it on makes every serviced client folder permanently reachable by link. Use `/share_folder` with an explicit `public_access` when a public link is genuinely needed.
 - `POST /create_client_folder` — Creates a client folder and applies access based on the client's Planfix task.
   - Body fields: `contact_id`, `folder_name`.
@@ -281,7 +282,7 @@ The HTTP server (see `src/drive_audit/server.py`) exposes authenticated endpoint
 - `POST /share_folder` — Grants writer access to a named subfolder inside the client folder.
   - Body fields: `contact_id`, `folder_url`. Optional: `email` (direct grant, skips Planfix lookup), `task_id` + `assignee_id` (override Planfix lookup; both must be provided together), `public_access` (role string, e.g. `"writer"`, `"reader"`, `"commenter"` — grants "anyone with the link" permission with that role; `true` defaults to `"reader"`), `lang`.
   - Behavior: requires `drive.writer_subdir` to be set in config. Finds the subfolder by that name inside the folder identified by `folder_url`, verifies it is a direct child folder of the client folder, then grants the configured role to the resolved accounts. When `public_access` is provided, also grants "anyone with the link" permission to the subfolder with the specified role. The `public_subdir` is not created inside this subfolder.
-  - Error responses: `writer_subdir_not_configured`, `unable_extract_folder_id`, `subfolder_not_found`, `subfolder_not_a_folder`, `subfolder_not_child`.
+  - Error responses: `writer_subdir_not_configured`, `unable_extract_folder_id`, `subfolder_not_found`, `subfolder_not_a_folder`, `subfolder_not_child`, `folder_outside_drive`, `folder_not_found`.
 
 - `POST /share_file` — Opens one document to "anyone with the link".
   - Body fields: `document_url`.
