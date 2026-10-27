@@ -16,6 +16,22 @@ Fully remove one (or a small group of) `email`s from a Shared Drive by combining
 - The email address(es) to revoke. Comma-separate to revoke several at once.
 - Service account with `permissions.delete` on the drive (manager-equivalent role).
 
+### Refreshing the snapshot without a full scan
+
+`scan.collect_permissions` is `false` in the working config, so a plain re-scan does **not** refresh `permissions.csv` — flip it to `true` first, and set it back afterwards. A full-depth permission scan is impractically slow (one API call per file over the whole drive), so for offboarding scan only the client-folder level:
+
+```yaml
+scan:
+  collect_permissions: true
+  collect_permissions_max_level: 1
+```
+
+Reference run on a 21752-object drive: **23 minutes**, 18269 objects skipped by depth, permissions collected from 3482 objects (13729 rows), `permissions.csv` down from 27 MB to 3 MB.
+
+Back up the previous snapshot before re-scanning (`cp data/permissions.csv data/permissions-<date>.bak.csv`) — the scan overwrites it, and the old full-depth snapshot is the only record of grants deeper than level 1.
+
+**Depth-1 blind spot:** grants attached directly to a file (not to the client folder) live below level 1 and will be missing from the fresh snapshot. Cross-check the filtered result against the previous full-depth snapshot: rows present there but absent in the new one are still worth revoking — build a one-row CSV with the same columns and run `remove_access` on it. Conversely, an email that shows no client-folder grants may still hold access granted deeper; a depth-1 scan cannot prove the drive is clean, only that the client folders are.
+
 ## Pipeline
 
 ### 1. Filter the snapshot for the user's rows
