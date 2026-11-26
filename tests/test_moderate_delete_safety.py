@@ -34,6 +34,7 @@ from drive_audit.commands.moderate_delete import (
     apply,
     run_moderate_delete,
     scan,
+    watch,
 )
 from drive_audit.config_loader import build_moderate_delete_config
 
@@ -349,24 +350,24 @@ def test_csv_audit_is_not_overwritten_when_sheet_append_failed(tmp_path, monkeyp
     assert "first" in _csv_file_ids(tmp_path / "deletions.csv")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="approval is keyed by file_id only, not by the name the moderator saw",
-)
 def test_apply_refuses_when_live_name_differs_from_approved_row(tmp_path):
     drive = FakeDriveService(base_tree([item("file", "contract +delete", "scope")]))
     sheet_service, client = sheets_client()
     seed_pending(sheet_service, [pending_row("file", "draft +delete")])
 
+    preview = apply(drive, client, drive_config(tmp_path), md_config(), apply=False)
+    assert preview == []
+    assert approval_by_file(client)["file"] == "yes"
+
     apply(drive, client, drive_config(tmp_path), md_config(), apply=True)
 
     assert drive.resource.items["file"]["trashed"] is False
+    row = client.read_pending()[0]
+    assert row["status"] == "pending"
+    assert row["approve"] == ""
+    assert row["current_name"] == "contract +delete"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="scan keeps an existing approval after the item is renamed",
-)
 def test_scan_clears_approval_when_name_changes_after_approval(tmp_path):
     drive = FakeDriveService(base_tree([item("file", "contract +delete", "scope")]))
     sheet_service, client = sheets_client()
@@ -375,6 +376,55 @@ def test_scan_clears_approval_when_name_changes_after_approval(tmp_path):
     scan(drive, client, drive_config(tmp_path), md_config())
 
     assert approval_by_file(client)["file"] == ""
+    assert status_by_file(client)["file"] == "pending"
+
+
+def test_scan_keeps_approval_when_name_is_unchanged(tmp_path):
+    drive = FakeDriveService(base_tree([item("file", "draft +delete", "scope")]))
+    sheet_service, client = sheets_client()
+    seed_pending(sheet_service, [pending_row("file", "draft +delete")])
+
+    scan(drive, client, drive_config(tmp_path), md_config())
+
+    assert approval_by_file(client)["file"] == "yes"
+
+
+def test_watch_rename_between_cycles_voids_approval_before_apply(tmp_path):
+    drive = FakeDriveService(base_tree([item("file", "draft +delete", "scope")]))
+    sheet_service, client = sheets_client()
+    config = drive_config(tmp_path)
+    moderate = md_config()
+    approve_column = None
+    cycle = {"count": 0}
+
+    def between_cycles(seconds):
+        assert seconds == moderate.scan_interval_seconds
+        cycle["count"] += 1
+        if cycle["count"] == 1:
+            # The moderator approves the queued row, then someone renames.
+            nonlocal approve_column
+            headers = sheet_service.tabs["pending"][0]
+            approve_column = headers.index("approve")
+            sheet_service.tabs["pending"][1][approve_column] = "yes"
+            drive.resource.items["file"]["name"] = "contract +delete"
+
+    completed = watch(
+        drive,
+        client,
+        config,
+        moderate,
+        sleep_fn=between_cycles,
+        max_cycles=2,
+    )
+
+    assert completed == 2
+    row = client.read_pending()[0]
+    assert row["current_name"] == "contract +delete"
+    assert row["approve"] == ""
+    assert row["status"] == "pending"
+
+    assert apply(drive, client, config, moderate, apply=True) == []
+    assert drive.resource.items["file"]["trashed"] is False
 
 
 @pytest.mark.xfail(strict=True, reason="only an empty marker is rejected")

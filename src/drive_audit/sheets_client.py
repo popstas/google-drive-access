@@ -630,6 +630,7 @@ class SheetsClient:
             "marker_removed": 0,
             "out_of_scope": 0,
             "reactivated": 0,
+            "approval_reset": 0,
             "deduplicated": 0,
             "removed": 0,
         }
@@ -664,6 +665,13 @@ class SheetsClient:
                     status = "pending"
                     approve = ""
                     stats["reactivated"] += 1
+                elif approve and str(candidate.get("current_name", "")) != str(
+                    current.get("current_name", "")
+                ):
+                    # The moderator decided on the name shown in the row; a
+                    # renamed item needs a fresh decision.
+                    approve = ""
+                    stats["approval_reset"] += 1
 
                 merged = {
                     header: candidate.get(header, current.get(header, ""))

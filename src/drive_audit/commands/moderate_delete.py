@@ -712,6 +712,19 @@ def apply(
                 logger.info("Marker removed before apply: {} ({})", name, file_id)
                 _set_status(sheets_client, file_id, "marker_removed", apply)
                 continue
+            approved_name = str(row.get("current_name") or "")
+            if approved_name and approved_name != name:
+                logger.warning(
+                    "Name changed since approval, approval cleared: {} -> {} ({})",
+                    approved_name,
+                    name,
+                    file_id,
+                )
+                if apply:
+                    sheets_client.update_status(
+                        file_id, "pending", clear_approve=True, current_name=name
+                    )
+                continue
             if not _is_item_in_scope(
                 service, metadata, drive_config, roots, parent_cache
             ):
