@@ -310,7 +310,8 @@ Verify:
 - the queue row has the expected terminal status;
 - the `deleted` tab contains an audit row;
 - the CSV report contains the same item;
-- the item can be restored through normal Drive trash recovery.
+- the item can be restored through normal Drive trash recovery (Drive keeps
+  trashed items for 30 days, then deletes them permanently).
 
 Run `scan` once more. Confirm completed rows disappear from `pending` while the
 audit rows remain in `deleted`. This cleanup also applies to rejected rows and

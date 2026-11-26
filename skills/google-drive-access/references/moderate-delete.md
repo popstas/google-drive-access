@@ -114,6 +114,9 @@ apply re-fetches Drive metadata and verifies:
 
 - the item still exists and is not already trashed;
 - its current name still contains `name_marker`;
+- its current name still equals the row's `current_name`, i.e. the name the
+  moderator saw; otherwise the item is skipped, `approve` is cleared,
+  `current_name` shows the new name and the row stays `pending`;
 - it belongs to the configured Drive and `scan_roots`;
 - it has `capabilities.canTrash=true`;
 - folders are enabled explicitly;
@@ -124,6 +127,13 @@ Invalid rows are not trashed and receive a status such as `marker_removed`,
 `out_of_scope`, `already_trashed`, `folder_blocked`, `no_access`, or
 `renamer_not_allowed`. Overlapping folder/descendant approvals receive
 `overlap_conflict`. Approval is cleared.
+
+A scan or watch cycle that finds a renamed item (the name still has the marker
+but differs from `current_name`) clears any decision in `approve`, so a
+moderator must decide again on the new name.
+
+If apply fails midway, rows already trashed in that run are still written to the
+`deleted` tab and the CSV before the error is raised.
 
 The visible moderation choices are `yes` and `no`. Typed aliases `1` and `да`
 mean approval; `0` and `нет` mean rejection. Matching is case-insensitive and
@@ -166,6 +176,11 @@ Stop `watch` with Ctrl+C.
 - It needs sufficient Drive access to list the selected tree.
 - It needs Content manager or higher to trash Shared Drive items.
 - Folder deletion remains disabled unless `allow_folder_delete: true`.
+  `allow_folder_delete` and `use_activity_api` accept booleans, `0`/`1` and
+  `true`/`false`/`yes`/`no`/`on`/`off`; any other value (including a quoted
+  typo or an empty value) is a configuration error.
+- Items in Drive trash (My Drive and Shared Drives) stay restorable for 30 days; after that
+  Google deletes them permanently.
 
 Use `docs/moderate-delete-setup.md` for service-account and authorized-user
 setup, safe dry-run validation, and the human/agent operating checklist.
