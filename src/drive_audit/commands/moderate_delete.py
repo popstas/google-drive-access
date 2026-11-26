@@ -263,6 +263,10 @@ def _validate_config(md_config: ModerateDeleteConfig) -> None:
             "commands.moderate_delete.name_marker must be at least "
             f"{MIN_NAME_MARKER_LENGTH} characters long"
         )
+    if md_config.max_per_run < 0:
+        raise ValueError(
+            "commands.moderate_delete.max_per_run must be 0 (no limit) or positive"
+        )
     if md_config.scan_interval_seconds <= 0:
         raise ValueError(
             "commands.moderate_delete.scan_interval_seconds must be positive"

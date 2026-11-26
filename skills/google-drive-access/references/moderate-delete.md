@@ -37,7 +37,7 @@ commands:
 | `name_marker` | `+delete` | Case-insensitive token; a trailing letter or digit means no match (`+deleted` is ignored). At least 3 characters, no leading or trailing whitespace, `null` is rejected |
 | `scan_roots` | `[]` | Folder IDs to traverse recursively; empty uses `drive.root_folder_id` |
 | `scan_interval_seconds` | `300` | Delay between `watch` cycles |
-| `max_per_run` | `200` | Maximum eligible items trashed by one apply |
+| `max_per_run` | `200` | Maximum eligible items trashed by one apply; `0` means no limit, negative values are rejected |
 | `report_csv` | `deletions-report.csv` | CSV written under `output.dir` |
 | `allow_folder_delete` | `false` | Explicit opt-in for trashing marked folders |
 | `use_activity_api` | `false` | Resolve rename actor/time through Activity + People |

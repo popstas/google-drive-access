@@ -490,7 +490,11 @@ def test_unrecognized_boolean_flag_is_rejected(value):
         )
 
 
-@pytest.mark.xfail(strict=True, reason="negative max_per_run silently means unlimited")
-def test_negative_max_per_run_is_rejected():
+@pytest.mark.parametrize("limit", [-1, -200])
+def test_negative_max_per_run_is_rejected(limit):
     with pytest.raises(ValueError):
-        _validate_config(md_config(max_per_run=-1))
+        _validate_config(md_config(max_per_run=limit))
+
+
+def test_zero_max_per_run_still_means_no_limit():
+    _validate_config(md_config(max_per_run=0))
