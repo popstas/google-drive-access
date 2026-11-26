@@ -254,10 +254,6 @@ def test_watch_and_scan_never_mutate_drive(tmp_path):
 # --- xfail: defects found in review ---------------------------------------
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="_remove_marker slices the original name with casefolded indices",
-)
 @pytest.mark.parametrize(
     "name, expected",
     [
@@ -270,10 +266,6 @@ def test_remove_marker_keeps_names_whose_casefold_changes_length(name, expected)
     assert _remove_marker(name, "+delete") == expected
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="rejection renames a live file to a mangled name (see _remove_marker)",
-)
 def test_rejection_rename_does_not_corrupt_extension(tmp_path):
     drive = FakeDriveService(base_tree([item("file", "Straße +delete.docx", "scope")]))
     sheet_service, client = sheets_client()

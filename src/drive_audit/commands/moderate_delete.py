@@ -35,52 +35,53 @@ def _utcnow_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _marker_spans(name: str, marker: str) -> List[Tuple[int, int]]:
+    """Return non-overlapping ``(start, end)`` spans of complete marker tokens.
+
+    Spans index the original ``name``. Casefolding the whole name first would
+    shift indices whenever casefold changes a character's length (``ß`` ->
+    ``ss``), so each window of the original name is compared on its own.
+    A match followed by a letter or digit is the prefix of a longer word and
+    is not a token.
+    """
+    if not marker or not name:
+        return []
+
+    folded_marker = marker.casefold()
+    width = len(marker)
+    spans: List[Tuple[int, int]] = []
+    index = 0
+    while index + width <= len(name):
+        end = index + width
+        if name[index:end].casefold() == folded_marker and (
+            end == len(name) or not name[end].isalnum()
+        ):
+            spans.append((index, end))
+            index = end
+            continue
+        index += 1
+    return spans
+
+
 def _has_marker(name: str, marker: str) -> bool:
     """Match a marker unless it is the prefix of a longer alphanumeric word."""
-    if not marker:
-        return False
-
-    folded_name = (name or "").casefold()
-    folded_marker = marker.casefold()
-    start = 0
-    while True:
-        marker_index = folded_name.find(folded_marker, start)
-        if marker_index < 0:
-            return False
-        marker_end = marker_index + len(folded_marker)
-        if marker_end == len(folded_name) or not folded_name[marker_end].isalnum():
-            return True
-        start = marker_index + 1
+    return bool(_marker_spans(name or "", marker))
 
 
 def _remove_marker(name: str, marker: str) -> str:
     """Remove complete marker tokens and adjacent leading whitespace."""
-    if not marker:
+    spans = _marker_spans(name or "", marker)
+    if not spans:
         return name
 
-    folded_name = (name or "").casefold()
-    folded_marker = marker.casefold()
     parts: List[str] = []
     cursor = 0
-    search_start = 0
-    while True:
-        marker_index = folded_name.find(folded_marker, search_start)
-        if marker_index < 0:
-            break
-        marker_end = marker_index + len(folded_marker)
-        if marker_end < len(folded_name) and folded_name[marker_end].isalnum():
-            search_start = marker_index + 1
-            continue
-
+    for marker_index, marker_end in spans:
         remove_start = marker_index
         while remove_start > cursor and name[remove_start - 1].isspace():
             remove_start -= 1
         parts.append(name[cursor:remove_start])
         cursor = marker_end
-        search_start = marker_end
-
-    if cursor == 0:
-        return name
     parts.append(name[cursor:])
     return "".join(parts).strip()
 
