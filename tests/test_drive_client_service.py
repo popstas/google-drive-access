@@ -73,7 +73,7 @@ def test_get_drive_info_handles_user_and_shared_drive():
             self.fields = fields
             return self
 
-        def execute(self):
+        def execute(self, num_retries=0):
             return {"about": True, "fields": self.fields}
 
     class DummyDrives:
@@ -84,7 +84,7 @@ def test_get_drive_info_handles_user_and_shared_drive():
             self.called_with = driveId
             return self
 
-        def execute(self):
+        def execute(self, num_retries=0):
             return {"drive": self.called_with}
 
     class DummyService:

@@ -8,6 +8,7 @@ from .drive_cache import (
     DEFAULT_LIST_FOLDER_CHILDREN_CACHE_TIMEOUT,
     ListFolderChildrenCache,
 )
+from .drive_client import DRIVE_API_NUM_RETRIES
 from .drive_permissions import DrivePermissions
 
 
@@ -57,7 +58,7 @@ class DriveFiles:
                 supportsAllDrives=True,
                 fields="id, name, mimeType, driveId",
             )
-            .execute()
+            .execute(num_retries=DRIVE_API_NUM_RETRIES)
         )
 
     def get_item_info(self, item_id: str) -> Dict[str, Any]:
@@ -68,7 +69,7 @@ class DriveFiles:
                 supportsAllDrives=True,
                 fields="id, name, mimeType, parents",
             )
-            .execute()
+            .execute(num_retries=DRIVE_API_NUM_RETRIES)
         )
 
     def list_files(
@@ -94,7 +95,11 @@ class DriveFiles:
                     "pageToken": page_token,
                 }
 
-                response = self._service.files().list(**request_kwargs).execute()
+                response = (
+                    self._service.files()
+                    .list(**request_kwargs)
+                    .execute(num_retries=DRIVE_API_NUM_RETRIES)
+                )
 
                 for file in response.get("files", []):
                     yield file
@@ -128,7 +133,11 @@ class DriveFiles:
                 "fields": "files(id, name)",
             }
 
-            response = self._service.files().list(**request_kwargs).execute()
+            response = (
+                self._service.files()
+                .list(**request_kwargs)
+                .execute(num_retries=DRIVE_API_NUM_RETRIES)
+            )
             files = response.get("files", [])
             if files:
                 return files[0]
@@ -147,7 +156,9 @@ class DriveFiles:
             }
 
             response_fallback = (
-                self._service.files().list(**request_kwargs_fallback).execute()
+                self._service.files()
+                .list(**request_kwargs_fallback)
+                .execute(num_retries=DRIVE_API_NUM_RETRIES)
             )
             all_folders = response_fallback.get("files", [])
 
@@ -240,7 +251,11 @@ class DriveFiles:
                     "pageToken": page_token,
                 }
 
-                response = self._service.files().list(**request_kwargs).execute()
+                response = (
+                    self._service.files()
+                    .list(**request_kwargs)
+                    .execute(num_retries=DRIVE_API_NUM_RETRIES)
+                )
 
                 for file in response.get("files", []):
                     fetched_files.append(file)

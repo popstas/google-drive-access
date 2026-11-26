@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 from googleapiclient.errors import HttpError
 from loguru import logger
 
+from .drive_client import DRIVE_API_NUM_RETRIES
 from .http_utils import LocalizedError
 
 
@@ -53,7 +54,7 @@ class DrivePermissions:
                         fields="nextPageToken, permissions(id, type, role, emailAddress, domain, displayName, allowFileDiscovery, expirationTime, deleted, permissionDetails)",
                         pageToken=page_token,
                     )
-                    .execute()
+                    .execute(num_retries=DRIVE_API_NUM_RETRIES)
                 )
 
                 permissions.extend(response.get("permissions", []))
@@ -92,7 +93,7 @@ class DrivePermissions:
                         "emailAddress": email,
                     },
                 )
-                .execute()
+                .execute(num_retries=DRIVE_API_NUM_RETRIES)
             )
         except HttpError as error:
             logger.error(
@@ -118,7 +119,7 @@ class DrivePermissions:
                     sendNotificationEmail=False,
                     body=body,
                 )
-                .execute()
+                .execute(num_retries=DRIVE_API_NUM_RETRIES)
             )
         except HttpError as error:
             logger.error(
@@ -148,7 +149,7 @@ class DrivePermissions:
                         "allowFileDiscovery": False,
                     },
                 )
-                .execute()
+                .execute(num_retries=DRIVE_API_NUM_RETRIES)
             )
         except HttpError as error:
             logger.error("Failed to set public permission for {}: {}", file_id, error)
@@ -178,7 +179,7 @@ class DrivePermissions:
                 fileId=file_id,
                 permissionId=permission_id,
                 supportsAllDrives=True,
-            ).execute()
+            ).execute(num_retries=DRIVE_API_NUM_RETRIES)
             logger.debug("Deleted permission {} from file {}", permission_id, file_id)
             return "deleted"
         except HttpError as error:
