@@ -58,7 +58,8 @@ def build_moderate_delete_config(config_data: Dict[str, Any]) -> ModerateDeleteC
     defaults = ModerateDeleteConfig()
     return ModerateDeleteConfig(
         sheet_id=str(section.get("sheet_id", defaults.sheet_id)),
-        name_marker=str(section.get("name_marker", defaults.name_marker)),
+        # An explicit ``name_marker: null`` must fail validation, not become "None".
+        name_marker=str(section.get("name_marker", defaults.name_marker) or ""),
         scan_roots=list(section.get("scan_roots", defaults.scan_roots) or []),
         scan_interval_seconds=int(
             section.get("scan_interval_seconds", defaults.scan_interval_seconds)

@@ -46,7 +46,7 @@ commands:
     csv_file: "data/move_files.csv"
   moderate_delete:
     sheet_id: "<GOOGLE_SHEET_ID>"             # Google Sheet for pending/deleted tabs
-    name_marker: "+delete"                     # case-insensitive token; +deleted does not match
+    name_marker: "+delete"                     # case-insensitive token; +deleted does not match; min 3 chars, no edge whitespace
     scan_roots: ["<FOLDER_ID>"]                # only descendants of these folders; empty uses drive.root_folder_id
     scan_interval_seconds: 300                 # interval used by `moderate_delete watch`
     max_per_run: 200                           # safety cap on deletions per apply run

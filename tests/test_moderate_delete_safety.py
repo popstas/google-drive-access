@@ -427,19 +427,22 @@ def test_watch_rename_between_cycles_voids_approval_before_apply(tmp_path):
     assert drive.resource.items["file"]["trashed"] is False
 
 
-@pytest.mark.xfail(strict=True, reason="only an empty marker is rejected")
-@pytest.mark.parametrize("marker", [" ", "  ", "1", "a"])
+@pytest.mark.parametrize("marker", [" ", "  ", "1", "a", "ab", " +delete", "+delete "])
 def test_too_broad_marker_is_rejected(marker):
     with pytest.raises(ValueError):
         _validate_config(md_config(name_marker=marker))
 
 
 def test_whitespace_marker_would_match_ordinary_names():
-    # Documents the blast radius of the missing validation above.
+    # Why the validation above matters.
     assert _has_marker("report (1).docx", " ") is True
 
 
-@pytest.mark.xfail(strict=True, reason="name_marker: null becomes the string 'None'")
+@pytest.mark.parametrize("marker", ["+delete", "+del", "delete it", "+удалить"])
+def test_reasonable_marker_is_accepted(marker):
+    _validate_config(md_config(name_marker=marker))
+
+
 def test_null_marker_in_config_is_rejected():
     config = build_moderate_delete_config(
         {"commands": {"moderate_delete": {"sheet_id": "s", "name_marker": None}}}

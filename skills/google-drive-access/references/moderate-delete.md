@@ -34,7 +34,7 @@ commands:
 | Key | Default | Meaning |
 |---|---:|---|
 | `sheet_id` | required | Sheet containing `pending` and `deleted` tabs |
-| `name_marker` | `+delete` | Case-insensitive token; a trailing letter or digit means no match (`+deleted` is ignored) |
+| `name_marker` | `+delete` | Case-insensitive token; a trailing letter or digit means no match (`+deleted` is ignored). At least 3 characters, no leading or trailing whitespace, `null` is rejected |
 | `scan_roots` | `[]` | Folder IDs to traverse recursively; empty uses `drive.root_folder_id` |
 | `scan_interval_seconds` | `300` | Delay between `watch` cycles |
 | `max_per_run` | `200` | Maximum eligible items trashed by one apply |

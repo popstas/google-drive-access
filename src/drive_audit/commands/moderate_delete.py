@@ -23,6 +23,8 @@ from ..sheets_client import DELETED_HEADERS, SheetsClient, get_sheets_service
 FOLDER_MIME = "application/vnd.google-apps.folder"
 APPROVE_VALUES = {"yes", "1", "да"}
 REJECT_VALUES = {"no", "0", "нет"}
+# Shorter markers ("a", "1") would queue a large share of ordinary names.
+MIN_NAME_MARKER_LENGTH = 3
 
 ITEM_FIELDS = (
     "id,name,mimeType,parents,driveId,createdTime,modifiedTime,trashed,size,"
@@ -248,8 +250,19 @@ def _allowed_domains(md_config: ModerateDeleteConfig) -> Set[str]:
 def _validate_config(md_config: ModerateDeleteConfig) -> None:
     if not md_config.sheet_id:
         raise ValueError("commands.moderate_delete.sheet_id is required")
-    if not md_config.name_marker:
+    marker = md_config.name_marker
+    if not marker:
         raise ValueError("commands.moderate_delete.name_marker must not be empty")
+    if marker != marker.strip():
+        raise ValueError(
+            "commands.moderate_delete.name_marker must not start or end with "
+            "whitespace"
+        )
+    if len(marker) < MIN_NAME_MARKER_LENGTH:
+        raise ValueError(
+            "commands.moderate_delete.name_marker must be at least "
+            f"{MIN_NAME_MARKER_LENGTH} characters long"
+        )
     if md_config.scan_interval_seconds <= 0:
         raise ValueError(
             "commands.moderate_delete.scan_interval_seconds must be positive"
