@@ -1,8 +1,9 @@
 """Safety-focused tests for moderated deletion.
 
 Green tests pin down behavior that keeps deletion reversible, scoped and
-explicitly approved. ``xfail(strict=True)`` tests document known defects found
-in review; they start failing (and must be un-marked) once the defect is fixed.
+explicitly approved, including regressions for defects found in review.
+``xfail(strict=True)`` tests document known defects that are not fixed yet;
+they start failing (and must be un-marked) once the defect is fixed.
 """
 
 import csv
@@ -252,7 +253,7 @@ def test_watch_and_scan_never_mutate_drive(tmp_path):
     assert drive.resource.update_calls == []
 
 
-# --- xfail: defects found in review ---------------------------------------
+# --- regressions for review findings (xfail = not fixed yet) -------------
 
 
 @pytest.mark.parametrize(
