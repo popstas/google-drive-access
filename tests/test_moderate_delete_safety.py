@@ -278,10 +278,6 @@ def test_rejection_rename_does_not_corrupt_extension(tmp_path):
     assert drive.resource.items["file"]["name"] == "Straße.docx"
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="audit rows are written after the loop; an exception mid-run loses them",
-)
 def test_audit_survives_status_update_failure_after_a_trash(tmp_path, monkeypatch):
     drive = FakeDriveService(
         base_tree(
@@ -314,7 +310,8 @@ def test_audit_survives_status_update_failure_after_a_trash(tmp_path, monkeypatc
     assert drive.resource.items["first"]["trashed"] is True
     csv_ids = _csv_file_ids(tmp_path / "deletions.csv")
     sheet_ids = [row["file_id"] for row in client.read_deleted()]
-    assert "first" in csv_ids or "first" in sheet_ids
+    assert "first" in csv_ids
+    assert "first" in sheet_ids
 
 
 @pytest.mark.xfail(

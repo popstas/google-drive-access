@@ -480,6 +480,26 @@ def _deleted_record(
     }
 
 
+def _record_deletions(
+    sheets_client: SheetsClient,
+    deleted_rows: List[Dict[str, Any]],
+    report_path: str,
+) -> List[Exception]:
+    """Write the deletion audit to the Sheet and CSV; return the write errors."""
+    audit_errors: List[Exception] = []
+    try:
+        sheets_client.append_deleted(deleted_rows, total=len(deleted_rows))
+    except Exception as error:
+        logger.error("Failed to append deletion audit to Sheet: {}", error)
+        audit_errors.append(error)
+    try:
+        _write_report_csv(deleted_rows, report_path)
+    except Exception as error:
+        logger.error("Failed to write deletion audit CSV: {}", error)
+        audit_errors.append(error)
+    return audit_errors
+
+
 def _set_status(
     sheets_client: SheetsClient,
     file_id: str,
@@ -676,104 +696,107 @@ def apply(
             )
             _set_status(sheets_client, file_id, "overlap_conflict", apply)
 
-    for row in approved:
-        file_id = row.get("file_id", "")
-        metadata = metadata_by_id.get(file_id)
-        if metadata is None or file_id in hierarchy_conflicts:
-            continue
-
-        name = str(metadata.get("name") or "")
-        if metadata.get("trashed"):
-            logger.info("Skipping already trashed item {} ({})", name, file_id)
-            _set_status(sheets_client, file_id, "already_trashed", apply)
-            continue
-        if not _has_marker(name, md_config.name_marker):
-            logger.info("Marker removed before apply: {} ({})", name, file_id)
-            _set_status(sheets_client, file_id, "marker_removed", apply)
-            continue
-        if not _is_item_in_scope(service, metadata, drive_config, roots, parent_cache):
-            logger.warning("Refusing out-of-scope item {} ({})", name, file_id)
-            _set_status(sheets_client, file_id, "out_of_scope", apply)
-            continue
-        if (
-            metadata.get("mimeType") == FOLDER_MIME
-            and not md_config.allow_folder_delete
-        ):
-            logger.warning("Folder deletion is disabled: {} ({})", name, file_id)
-            _set_status(sheets_client, file_id, "folder_blocked", apply)
-            continue
-        if not (metadata.get("capabilities") or {}).get("canTrash", False):
-            logger.warning("No permission to trash {} ({})", name, file_id)
-            _set_status(sheets_client, file_id, "no_access", apply)
-            continue
-
-        rename_event = None
-        if allowed_domains:
-            if rename_resolver is not None:
-                rename_event = rename_resolver.resolve_rename(
-                    file_id,
-                    name,
-                    md_config.name_marker,
-                    metadata,
-                )
-            domain = rename_event.renamer_domain if rename_event else ""
-            if domain.casefold().rstrip(".") not in allowed_domains:
-                logger.warning(
-                    "Refusing untrusted or unresolved renamer for {} ({})",
-                    name,
-                    file_id,
-                )
-                _set_status(sheets_client, file_id, "renamer_not_allowed", apply)
+    try:
+        for row in approved:
+            file_id = row.get("file_id", "")
+            metadata = metadata_by_id.get(file_id)
+            if metadata is None or file_id in hierarchy_conflicts:
                 continue
 
-        if md_config.max_per_run > 0 and eligible_count >= md_config.max_per_run:
-            break
-        eligible_count += 1
+            name = str(metadata.get("name") or "")
+            if metadata.get("trashed"):
+                logger.info("Skipping already trashed item {} ({})", name, file_id)
+                _set_status(sheets_client, file_id, "already_trashed", apply)
+                continue
+            if not _has_marker(name, md_config.name_marker):
+                logger.info("Marker removed before apply: {} ({})", name, file_id)
+                _set_status(sheets_client, file_id, "marker_removed", apply)
+                continue
+            if not _is_item_in_scope(
+                service, metadata, drive_config, roots, parent_cache
+            ):
+                logger.warning("Refusing out-of-scope item {} ({})", name, file_id)
+                _set_status(sheets_client, file_id, "out_of_scope", apply)
+                continue
+            if (
+                metadata.get("mimeType") == FOLDER_MIME
+                and not md_config.allow_folder_delete
+            ):
+                logger.warning("Folder deletion is disabled: {} ({})", name, file_id)
+                _set_status(sheets_client, file_id, "folder_blocked", apply)
+                continue
+            if not (metadata.get("capabilities") or {}).get("canTrash", False):
+                logger.warning("No permission to trash {} ({})", name, file_id)
+                _set_status(sheets_client, file_id, "no_access", apply)
+                continue
 
-        if rename_event is not None:
-            row = dict(row)
-            row["renamer_name"] = rename_event.renamer_name
-            row["renamer_email"] = rename_event.renamer_email
-            row["renamed_at"] = rename_event.renamed_at
-            row["renamer_person_id"] = rename_event.person_name
-        record = _deleted_record(row, metadata, _utcnow_iso())
+            rename_event = None
+            if allowed_domains:
+                if rename_resolver is not None:
+                    rename_event = rename_resolver.resolve_rename(
+                        file_id,
+                        name,
+                        md_config.name_marker,
+                        metadata,
+                    )
+                domain = rename_event.renamer_domain if rename_event else ""
+                if domain.casefold().rstrip(".") not in allowed_domains:
+                    logger.warning(
+                        "Refusing untrusted or unresolved renamer for {} ({})",
+                        name,
+                        file_id,
+                    )
+                    _set_status(sheets_client, file_id, "renamer_not_allowed", apply)
+                    continue
 
-        if not apply:
-            logger.info("[dry-run] would trash {} ({})", name, file_id)
+            if md_config.max_per_run > 0 and eligible_count >= md_config.max_per_run:
+                break
+            eligible_count += 1
+
+            if rename_event is not None:
+                row = dict(row)
+                row["renamer_name"] = rename_event.renamer_name
+                row["renamer_email"] = rename_event.renamer_email
+                row["renamed_at"] = rename_event.renamed_at
+                row["renamer_person_id"] = rename_event.person_name
+            record = _deleted_record(row, metadata, _utcnow_iso())
+
+            if not apply:
+                logger.info("[dry-run] would trash {} ({})", name, file_id)
+                deleted_rows.append(record)
+                continue
+
+            try:
+                trash_file(service, file_id)
+            except Exception as error:
+                logger.error("Failed to trash {} ({}): {}", name, file_id, error)
+                _set_status(sheets_client, file_id, "error", True)
+                continue
+
+            try:
+                sheets_client.update_status(file_id, "trashed", clear_approve=True)
+            except Exception as error:
+                logger.error(
+                    "Trashed {} ({}) but failed to update pending status: {}",
+                    name,
+                    file_id,
+                    error,
+                )
             deleted_rows.append(record)
-            continue
-
-        try:
-            trash_file(service, file_id)
-        except Exception as error:
-            logger.error("Failed to trash {} ({}): {}", name, file_id, error)
-            _set_status(sheets_client, file_id, "error", True)
-            continue
-
-        try:
-            sheets_client.update_status(file_id, "trashed", clear_approve=True)
-        except Exception as error:
-            logger.error(
-                "Trashed {} ({}) but failed to update pending status: {}",
-                name,
-                file_id,
-                error,
+            logger.info("Trashed {} ({})", name, file_id)
+    except BaseException:
+        # Items trashed before the failure must still reach the audit;
+        # otherwise the next scan purges their rows and no record remains.
+        if apply and deleted_rows:
+            _record_deletions(
+                sheets_client, deleted_rows, _report_path(drive_config, md_config)
             )
-        deleted_rows.append(record)
-        logger.info("Trashed {} ({})", name, file_id)
+        raise
 
     if apply and deleted_rows:
-        audit_errors = []
-        try:
-            sheets_client.append_deleted(deleted_rows, total=len(deleted_rows))
-        except Exception as error:
-            logger.error("Failed to append deletion audit to Sheet: {}", error)
-            audit_errors.append(error)
-        try:
-            _write_report_csv(deleted_rows, _report_path(drive_config, md_config))
-        except Exception as error:
-            logger.error("Failed to write deletion audit CSV: {}", error)
-            audit_errors.append(error)
+        audit_errors = _record_deletions(
+            sheets_client, deleted_rows, _report_path(drive_config, md_config)
+        )
         if audit_errors:
             raise RuntimeError(
                 "Items were trashed but one or more audit writes failed"
