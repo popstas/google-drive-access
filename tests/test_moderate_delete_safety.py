@@ -459,12 +459,35 @@ def test_word_marker_does_not_match_inside_a_longer_word():
     assert _has_marker("undelete.docx", "delete") is False
 
 
-@pytest.mark.xfail(strict=True, reason="bool('false') is True")
-def test_quoted_false_does_not_enable_folder_delete():
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        (False, False),
+        (True, True),
+        ("false", False),
+        ("False", False),
+        ("no", False),
+        ("0", False),
+        (0, False),
+        ("true", True),
+        ("yes", True),
+        (1, True),
+    ],
+)
+@pytest.mark.parametrize("key", ["allow_folder_delete", "use_activity_api"])
+def test_boolean_flags_parse_quoted_values_strictly(key, value, expected):
     config = build_moderate_delete_config(
-        {"commands": {"moderate_delete": {"allow_folder_delete": "false"}}}
+        {"commands": {"moderate_delete": {key: value}}}
     )
-    assert config.allow_folder_delete is False
+    assert getattr(config, key) is expected
+
+
+@pytest.mark.parametrize("value", ["maybe", "ture", 2, [], {}])
+def test_unrecognized_boolean_flag_is_rejected(value):
+    with pytest.raises(ValueError):
+        build_moderate_delete_config(
+            {"commands": {"moderate_delete": {"allow_folder_delete": value}}}
+        )
 
 
 @pytest.mark.xfail(strict=True, reason="negative max_per_run silently means unlimited")
