@@ -13,7 +13,7 @@ class _FakeRequest:
     def __init__(self, response):
         self._response = response
 
-    def execute(self):
+    def execute(self, num_retries=0):
         return self._response
 
 

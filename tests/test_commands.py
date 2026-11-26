@@ -685,7 +685,7 @@ def test_move_files_from_csv_moves_listed_files(tmp_path, monkeypatch):
         def __init__(self, response):
             self.response = response
 
-        def execute(self):
+        def execute(self, num_retries=0):
             return self.response
 
     class FakeFilesResource:
@@ -775,7 +775,7 @@ def test_drive_links_info_retrieves_folder_metadata(tmp_path, monkeypatch):
         def __init__(self, data):
             self.data = data
 
-        def execute(self):
+        def execute(self, num_retries=0):
             return self.data
 
     class FakeService:

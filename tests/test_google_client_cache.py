@@ -15,7 +15,7 @@ class FakeRequest:
     def __init__(self, response: Dict):
         self.response = response
 
-    def execute(self) -> Dict:
+    def execute(self, num_retries=0) -> Dict:
         return self.response
 
 
