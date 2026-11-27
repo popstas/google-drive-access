@@ -56,6 +56,15 @@ class _FakeService:
         return self.files_api
 
 
+class _FakeFilesUpdateOnly:
+    def __init__(self):
+        self.update_calls = []
+
+    def update(self, **kwargs):
+        self.update_calls.append(kwargs)
+        return _FakeRequest({"id": kwargs.get("fileId"), "trashed": True})
+
+
 class _FakePermissions(DrivePermissions):
     def __init__(self):
         self.ensure_calls = []
@@ -221,6 +230,21 @@ def test_move_file_clears_cached_children(tmp_path):
     )
 
     assert len(files_api.list_api.calls) == 4
+
+
+def test_trash_file_sends_trashed_true_with_all_drives_support():
+    files_api = _FakeFilesUpdateOnly()
+    service = _FakeService(files_api)
+
+    result = DriveFiles(service, cache=ListFolderChildrenCache()).trash_file("file-9")
+
+    assert len(files_api.update_calls) == 1
+    call = files_api.update_calls[0]
+    assert call["fileId"] == "file-9"
+    assert call["body"] == {"trashed": True}
+    assert call["supportsAllDrives"] is True
+    assert call["fields"] == "id, trashed"
+    assert result == {"id": "file-9", "trashed": True}
 
 
 def test_ensure_public_subdir_delegates_to_permissions(tmp_path):

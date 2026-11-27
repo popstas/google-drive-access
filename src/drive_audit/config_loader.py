@@ -4,7 +4,13 @@ from typing import Any, Dict
 
 import yaml
 
-from .model import HttpConfig, PlanfixConfig, PlanfixEndpointConfig, ShareFileConfig
+from .model import (
+    HttpConfig,
+    ModerateDeleteConfig,
+    PlanfixConfig,
+    PlanfixEndpointConfig,
+    ShareFileConfig,
+)
 from .translations import TRANSLATIONS
 
 
@@ -45,6 +51,53 @@ def build_share_file_config(config_data: Dict[str, Any]) -> ShareFileConfig:
         days=int(section.get("days", 90)),
         role=str(section.get("role", "commenter")),
         public_client_folder=bool(section.get("public_client_folder", False)),
+    )
+
+
+_TRUE_STRINGS = {"true", "yes", "on", "1"}
+_FALSE_STRINGS = {"false", "no", "off", "0", ""}
+
+
+def _parse_bool(value: Any, key: str) -> bool:
+    """Parse a YAML flag strictly: a quoted "false" must not become True."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        folded = value.strip().casefold()
+        if folded in _TRUE_STRINGS:
+            return True
+        if folded in _FALSE_STRINGS:
+            return False
+    raise ValueError(f"{key} must be true or false, got {value!r}")
+
+
+def build_moderate_delete_config(config_data: Dict[str, Any]) -> ModerateDeleteConfig:
+    section = config_data.get("commands", {}).get("moderate_delete", {})
+    defaults = ModerateDeleteConfig()
+    return ModerateDeleteConfig(
+        sheet_id=str(section.get("sheet_id", defaults.sheet_id)),
+        # An explicit ``name_marker: null`` must fail validation, not become "None".
+        name_marker=str(section.get("name_marker", defaults.name_marker) or ""),
+        scan_roots=list(section.get("scan_roots", defaults.scan_roots) or []),
+        scan_interval_seconds=int(
+            section.get("scan_interval_seconds", defaults.scan_interval_seconds)
+        ),
+        max_per_run=int(section.get("max_per_run", defaults.max_per_run)),
+        report_csv=str(section.get("report_csv", defaults.report_csv)),
+        use_activity_api=_parse_bool(
+            section.get("use_activity_api", defaults.use_activity_api),
+            "commands.moderate_delete.use_activity_api",
+        ),
+        allowed_renamer_domains=list(
+            section.get("allowed_renamer_domains", defaults.allowed_renamer_domains)
+            or []
+        ),
+        allow_folder_delete=_parse_bool(
+            section.get("allow_folder_delete", defaults.allow_folder_delete),
+            "commands.moderate_delete.allow_folder_delete",
+        ),
     )
 
 
